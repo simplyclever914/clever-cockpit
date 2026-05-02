@@ -108,9 +108,12 @@ SEED = {
         ("oauth-audit", "OAuth/app permission audit", "Periodic checklist for GitHub/Cursor/Claude/Codex access hygiene.", "done", "chat"),
     ],
     "projects": [
-        ("clever-cockpit", "Clever Cockpit", "active", "Goal: stop losing ideas/tasks in chat; source: BentoBoard-inspired prototype", None),
-        ("daily-reviews", "Daily Reviews Pipeline", "active", "AI wrap-up + Telegram review + quality gates + SourceCraft publish", None),
-        ("tooling-sync", "Tooling Sync Discipline", "maintenance", "Dirty reminder, auto-discovery, GitHub push hygiene", None),
+        ("clever-cockpit", "Clever Cockpit", "active", "Outcome: единый локальный cockpit для идей, задач, approvals и activity. Focus: UX, связи idea→project→task, Telegram /idea capture и понятная очередь задач.", "cockpit-memory"),
+        ("telegram-command-idea", "Telegram /idea Capture", "planning", "Outcome: сообщения и replies из Telegram быстро попадают в Cockpit Ideas с source context. Scope: синтаксис команды, обработка reply, создание идеи/API и понятные ошибки. Next: финализировать контракт и реализовать command handler.", "telegram-idea-command"),
+        ("daily-reviews", "Daily Reviews & Publishing", "active", "Outcome: ежедневные AI/Agentic Dev и Telegram reviews публикуются и доставляются с quality gates. Scope: сбор источников, редактура, SourceCraft publish, Telegram send/pin, проверка ссылок.", None),
+        ("telegram-knowledge-index", "Telegram Knowledge Index", "maintenance", "Outcome: reader account поддерживает локальный searchable архив Telegram channels/groups. Scope: allowlist, auto-detect новых dialogs, incremental sync, SQLite FTS, safe logs без секретов.", None),
+        ("tooling-sync", "OpenClaw Tools & Skills", "maintenance", "Outcome: workspace-authored skills/scripts/docs синхронизированы в GitHub и не теряются. Scope: safe projection, autosync, dirty reminders, секреты вне repo.", None),
+        ("personal-ops", "Personal Ops & Reflection", "maintenance", "Outcome: регулярный reflection loop и операционные проверки помогают улучшать работу Вадима и Clever без лишнего шума. Scope: cron health, memory notes, конкретные предложения и follow-up ideas.", None),
     ],
     "tasks": [
         ("schema", "Описать жизненный цикл идеи", "Clever Cockpit", "open", "Результат: зафиксирован понятный цикл идея → решение → проект/задача → готово/отложено. Объём: статусы, обязательные связи и правила переходов. Готово когда: UI и API используют одни и те же термины жизненного цикла.", None),

@@ -343,10 +343,12 @@ const seedState = () => ({
     { id: 'park-supabase', title: 'Parked: full Supabase cockpit', status: 'done', body: 'Parked for now: too heavy until local prototype proves useful.' }
   ],
   projects: [
-    { id: 'clever-cockpit', title: 'Clever Cockpit', status: 'active', body: 'Goal: stop losing ideas/tasks in chat; source: BentoBoard-inspired prototype' },
-    { id: 'daily-reviews', title: 'Daily Reviews Pipeline', status: 'active', body: 'AI wrap-up + Telegram review + quality gates + SourceCraft publish' },
-    { id: 'tooling-sync', title: 'Tooling Sync Discipline', status: 'maintenance', body: 'Dirty reminder, auto-discovery, GitHub push hygiene' },
-    { id: 'personal-ops', title: 'OpenClaw Personal Ops', status: 'planning', body: 'Memory, reflection loop, health checks, calendar and reminders later' }
+    { id: 'clever-cockpit', title: 'Clever Cockpit', status: 'active', source_idea_id: 'cockpit-memory', body: 'Outcome: единый локальный cockpit для идей, задач, approvals и activity. Focus: UX, связи idea→project→task, Telegram /idea capture и понятная очередь задач.' },
+    { id: 'telegram-command-idea', title: 'Telegram /idea Capture', status: 'planning', source_idea_id: 'telegram-idea-command', body: 'Outcome: сообщения и replies из Telegram быстро попадают в Cockpit Ideas с source context. Scope: синтаксис команды, обработка reply, создание идеи/API и понятные ошибки. Next: финализировать контракт и реализовать command handler.' },
+    { id: 'daily-reviews', title: 'Daily Reviews & Publishing', status: 'active', body: 'Outcome: ежедневные AI/Agentic Dev и Telegram reviews публикуются и доставляются с quality gates. Scope: сбор источников, редактура, SourceCraft publish, Telegram send/pin, проверка ссылок.' },
+    { id: 'telegram-knowledge-index', title: 'Telegram Knowledge Index', status: 'maintenance', body: 'Outcome: reader account поддерживает локальный searchable архив Telegram channels/groups. Scope: allowlist, auto-detect новых dialogs, incremental sync, SQLite FTS, safe logs без секретов.' },
+    { id: 'tooling-sync', title: 'OpenClaw Tools & Skills', status: 'maintenance', body: 'Outcome: workspace-authored skills/scripts/docs синхронизированы в GitHub и не теряются. Scope: safe projection, autosync, dirty reminders, секреты вне repo.' },
+    { id: 'personal-ops', title: 'Personal Ops & Reflection', status: 'maintenance', body: 'Outcome: регулярный reflection loop и операционные проверки помогают улучшать работу Вадима и Clever без лишнего шума. Scope: cron health, memory notes, конкретные предложения и follow-up ideas.' }
   ],
   schedules: [
     { name: 'Daily AI wrap-up', schedule: 'cron 30 9 * * * (Europe/Moscow)', enabled: true, last_run_at: null, next_run_at: null, last_status: 'never', description: 'Generate, publish, send, and pin the daily AI/agentic dev digest.' }
@@ -355,8 +357,8 @@ const seedState = () => ({
     { id: 'schema', title: 'Описать жизненный цикл идеи', project: 'Clever Cockpit', status: 'open', body: 'Результат: зафиксирован понятный цикл идея → решение → проект/задача → готово/отложено. Объём: статусы, обязательные связи и правила переходов. Готово когда: UI и API используют одни и те же термины жизненного цикла.' },
     { id: 'ok-deny', title: 'Добавить OK/Deny для approvals', project: 'Clever Cockpit', status: 'done', body: 'Результат: решения по approvals становятся явными. Объём: прототип кнопок OK/Deny и будущий backend API. Готово когда: у каждого pending approval есть понятное действие.' },
     { id: 'local-store', title: 'Создать локальное SQLite-хранилище', project: 'Clever Cockpit', status: 'open', body: 'Результат: состояние Cockpit сохраняется локально. Объём: SQLite-схема и state API; Supabase не входит в MVP. Готово когда: идеи, проекты и задачи переживают перезапуск сервера.' },
-    { id: 'telegram-capture', title: 'Описать контракт Telegram-команды /idea', project: 'Clever Cockpit', status: 'waiting', body: 'Результат: выбран точный синтаксис захвата идей из Telegram. Объём: /idea text, захват reply-сообщения, опциональные теги/проект и сообщения об ошибках. Готово когда: реализацию можно делать без догадок о пользовательском синтаксисе. Блокер: выбрать финальную грамматику команды.' },
-    { id: 'digest-gates', title: 'Переиспользовать quality gates для дайджестов', project: 'Daily Reviews Pipeline', status: 'open', body: 'Результат: проверки качества одинаково работают для AI и Telegram reviews. Объём: число источников, свежесть данных, обязательные секции, утечки локальных путей, HTTP 200. Готово когда: один скрипт валидирует оба пайплайна.' }
+    { id: 'telegram-capture', title: 'Описать контракт Telegram-команды /idea', project: 'Telegram /idea Capture', status: 'waiting', body: 'Результат: выбран точный синтаксис захвата идей из Telegram. Объём: /idea text, захват reply-сообщения, опциональные теги/проект и сообщения об ошибках. Готово когда: реализацию можно делать без догадок о пользовательском синтаксисе. Блокер: выбрать финальную грамматику команды.' },
+    { id: 'digest-gates', title: 'Переиспользовать quality gates для дайджестов', project: 'Daily Reviews & Publishing', status: 'open', body: 'Результат: проверки качества одинаково работают для AI и Telegram reviews. Объём: число источников, свежесть данных, обязательные секции, утечки локальных путей, HTTP 200. Готово когда: один скрипт валидирует оба пайплайна.' }
   ]
 });
 
@@ -640,7 +642,9 @@ function renderIdeas() {
 }
 function renderProjects() {
   const root = $('#project-list');
-  root.innerHTML = state.projects.length ? state.projects.map(p => {
+  const projectRank = p => ({ active:0, planning:1, draft:2, maintenance:3, done:4 }[p.status] ?? 5);
+  const projects = [...state.projects].sort((a,b) => projectRank(a) - projectRank(b) || a.title.localeCompare(b.title));
+  root.innerHTML = projects.length ? projects.map(p => {
     const tasks = tasksForProject(p);
     const active = tasks.find(t => t.status === 'open') || tasks[0];
     const idea = ideaForProject(p);
