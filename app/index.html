@@ -174,6 +174,7 @@
         <button class="nav-btn" data-view="projects">🧩 Projects <span class="badge">4</span></button>
         <button class="nav-btn" data-view="tasks">✅ Tasks <span class="badge">9</span></button>
         <button class="nav-btn" data-view="workflow">🗺 Workflow</button>
+        <button class="nav-btn" data-view="activity">📜 Activity <span class="badge">0</span></button>
         <button class="nav-btn" data-view="inbox">📥 Inbox <span class="badge">5</span></button>
         <button class="nav-btn" data-view="artifacts">🗂 Artifacts</button>
         <div class="nav-section">System</div>
@@ -216,6 +217,17 @@
         </div>
       </section>
 
+      <section id="view-activity" class="view hidden">
+        <div class="grid content-grid">
+          <div class="card panel">
+            <div class="panel-head"><h3>Activity log</h3><div class="tabs"><button class="tab active">All</button><button class="tab">Approvals</button><button class="tab">Ideas</button><button class="tab">Runs</button></div></div>
+            <p style="color:var(--muted);margin-top:0">Chronological log of runs, approvals, idea transitions, publications, errors, and follow-up outcomes.</p>
+            <div id="activity-list"></div>
+          </div>
+          <div class="card panel detail"><div id="activity-detail" class="preview"></div></div>
+        </div>
+      </section>
+
       <section id="view-artifacts" class="view hidden">
         <div class="grid content-grid"><div class="card panel"><div class="panel-head"><h3>Artifacts</h3><button class="btn">Compare versions</button></div><div id="artifact-list"></div></div><div class="card panel detail"><div class="preview"><h3>Artifact preview</h3><p>Markdown/HTML digest preview, source list, publish URL, and verification checks would render here.</p><div class="kv"><div>Checks</div><div><span class="pill good">HTTP 200</span> <span class="pill good">no local paths</span> <span class="pill good">required sections</span></div><div>Actions</div><div><button class="btn primary">Publish</button> <button class="btn">Send & pin</button></div></div></div></div></div>
       </section>
@@ -251,7 +263,7 @@
             <div class="wf-node project" style="left:548px;top:76px"><b>3. Draft project</b><small>Approved idea becomes a draft project with outcome + first task. Not active until confirmed.</small></div>
             <div class="wf-node task" style="left:548px;top:318px"><b>4. Tasks</b><small>Concrete next actions. Tasks can come from a project or directly from a small approved idea.</small></div>
             <div class="wf-node approval" style="left:92px;top:238px"><b>Approval checkpoint</b><small>Only explicit gates or new idea decisions pause here. Normal schedules run directly.</small></div>
-            <div class="wf-node feedback" style="left:235px;top:410px"><b>5. Run/result</b><small>Work produces activity, artifacts, learnings, blocked states, or follow-up ideas.</small></div>
+            <div class="wf-node feedback" style="left:235px;top:410px"><b>5. Run/result</b><small>Work produces Activity entries, artifacts, learnings, blocked states, or follow-up ideas.</small></div>
             <div class="wf-node idea" style="left:365px;top:506px"><b>Feedback loop</b><small>Results can spawn new ideas, update the project, or close tasks. Nothing should disappear in chat.</small></div>
           </div>
           <div class="card panel detail">
@@ -263,7 +275,7 @@
                 <div class="item"><h4>Task = next action</h4><p>Задача должна быть исполнимой: один понятный шаг, статус, привязка к проекту или source idea.</p></div>
                 <div class="item"><h4>Schedules run by default</h4><p>Расписания делают свою работу без approval, если Вадим явно не поставил gate. Approval нужен для отдельных решений/новых идей.</p></div>
                 <div class="item"><h4>Approvals are explicit gates</h4><p>OK/Deny в Approvals не “просто заметка”: runner забирает approved action и выполняет только allowlisted handler.</p></div>
-                <div class="item"><h4>Activity closes the loop</h4><p>Каждый запуск, публикация, ошибка или результат попадает в activity и может породить новую идею/таск.</p></div>
+                <div class="item"><h4>Activity closes the loop</h4><p>Каждый запуск, публикация, ошибка или результат попадает в отдельный раздел Activity и может породить новую идею/таск.</p></div>
               </div>
             </div>
           </div>
@@ -390,6 +402,7 @@ function renderCounts() {
   setBadge('ideas', ideas);
   setBadge('projects', projects);
   setBadge('tasks', tasks);
+  setBadge('activity', state.activity.length);
   setBadge('inbox', state.activity.length);
 
   const navApproval = $('[data-view="approvals"]');
@@ -436,9 +449,25 @@ function renderDetail(x=state.activity[0]) {
   $('#detail').innerHTML = `<h3>${escapeHtml(x.title)}</h3><p>${escapeHtml(x.body)}</p><div class="kv"><div>Type</div><div>${escapeHtml(x.kind || x.t || 'activity')}</div><div>Status</div><div>${pill(x.status || 'new', statusClass(x.status))}</div>${runRows}<div>Priority</div><div>${pill(x.priority || 'normal', priorityClass(x.priority))}</div>${handlerRows}${errorRows}</div><p style="color:var(--muted)">Future version: show source evidence, run logs, diff, and exact command/message before approval.</p>`;
 }
 function renderActivity() {
-  $('#item-list').innerHTML = state.activity.length ? state.activity.map(itemCard).join('') : '<div class="empty">All caught up</div>';
+  const html = state.activity.length ? state.activity.map(itemCard).join('') : '<div class="empty">All caught up</div>';
+  $('#item-list').innerHTML = html;
   $$('#item-list .item').forEach(el => el.onclick = () => renderDetail(state.activity[+el.dataset.activity]));
   renderDetail(state.activity[0]);
+  const activityList = $('#activity-list');
+  if (activityList) {
+    activityList.innerHTML = html;
+    $$('#activity-list .item').forEach(el => el.onclick = () => renderActivityDetail(state.activity[+el.dataset.activity]));
+    renderActivityDetail(state.activity[0]);
+  }
+}
+function renderActivityDetail(x=state.activity[0]) {
+  const target = $('#activity-detail');
+  if (!target) return;
+  if (!x) { target.innerHTML = '<div class="empty">No activity yet</div>'; return; }
+  const handlerRows = x.handler ? `<div>Handler</div><div>${escapeHtml(x.handler)}</div>` : '';
+  const runRows = x.run_status ? `<div>Run</div><div>${pill(x.run_status, statusClass(x.run_status))}</div>` : '';
+  const errorRows = x.last_error ? `<div>Last error</div><div>${escapeHtml(x.last_error)}</div>` : '';
+  target.innerHTML = `<h3>${escapeHtml(x.title)}</h3><p>${escapeHtml(x.body)}</p><div class="kv"><div>Type</div><div>${escapeHtml(x.kind || x.t || 'activity')}</div><div>Status</div><div>${pill(x.status || 'new', statusClass(x.status))}</div>${runRows}<div>Priority</div><div>${pill(x.priority || 'normal', priorityClass(x.priority))}</div>${handlerRows}${errorRows}</div><p style="color:var(--muted)">Activity is the durable feedback loop: it records what happened so ideas, projects, and tasks can evolve from actual results.</p>`;
 }
 function simpleList(id, rows, type) {
   const el = document.getElementById(id);
@@ -530,7 +559,7 @@ function showView(v) {
   $('#view-desc').textContent = titles[v][1];
 }
 
-const titles = {ideas:['Ideas','Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.'],projects:['Projects','Approved ideas grouped into outcomes with owners, next tasks, and review dates.'],tasks:['Tasks','Concrete next actions created from ideas, projects, digests, and operational work.'],workflow:['Workflow','The lifecycle that connects ideas, decisions, draft projects, tasks, approvals, and activity feedback.'],inbox:['Inbox','Attention feed: approvals, failures, useful finds, and reminders.'],approvals:['Approvals','Human-in-the-loop queue with OK/Deny buttons for external, destructive, expensive, or sensitive actions.'],artifacts:['Artifacts','Digest drafts, SourceCraft pages, generated reports, scripts, and compareable outputs.'],runs:['Runs','Cron jobs, subagents, background commands, last success and logs.'],health:['Health','Freshness checks, sync state, publish checks, and operational risks.']};
+const titles = {ideas:['Ideas','Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.'],projects:['Projects','Approved ideas grouped into outcomes with owners, next tasks, and review dates.'],tasks:['Tasks','Concrete next actions created from ideas, projects, digests, and operational work.'],workflow:['Workflow','The lifecycle that connects ideas, decisions, draft projects, tasks, approvals, schedules, and activity feedback.'],activity:['Activity','Chronological event log: runs, approvals, idea transitions, publications, errors, and outcomes.'],inbox:['Inbox','Attention feed: approvals, failures, useful finds, and reminders.'],approvals:['Approvals','Human-in-the-loop queue with OK/Deny buttons for external, destructive, expensive, or sensitive actions.'],artifacts:['Artifacts','Digest drafts, SourceCraft pages, generated reports, scripts, and compareable outputs.'],runs:['Runs','Cron jobs, subagents, background commands, last success and logs.'],health:['Health','Freshness checks, sync state, publish checks, and operational risks.']};
 
 $$('.nav-btn').forEach(btn => btn.onclick = () => showView(btn.dataset.view));
 $$('[data-theme-btn]').forEach(btn => btn.onclick = () => { state.theme = btn.dataset.themeBtn; renderAll(); });
