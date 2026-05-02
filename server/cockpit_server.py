@@ -113,9 +113,9 @@ SEED = {
         ("tooling-sync", "Tooling Sync Discipline", "maintenance", "Dirty reminder, auto-discovery, GitHub push hygiene", None),
     ],
     "tasks": [
-        ("schema", "Define idea lifecycle schema", "Clever Cockpit", "open", "idea → decision → project/task → done/parked", None),
-        ("local-store", "Create local SQLite store", "Clever Cockpit", "open", "SQLite from the start; no Supabase for MVP", None),
-        ("telegram-capture", "Add /idea capture path from Telegram", "Clever Cockpit", "waiting", "Needs command/message routing design", None),
+        ("schema", "Define idea lifecycle schema", "Clever Cockpit", "open", "Outcome: document the idea → decision → project/task → done/parked lifecycle. Scope: statuses, required links, and transition rules. Done when: UI and API use the same lifecycle terms.", None),
+        ("local-store", "Create local SQLite store", "Clever Cockpit", "open", "Outcome: persist cockpit state locally. Scope: SQLite schema and state API; Supabase is out of scope for MVP. Done when: ideas/projects/tasks survive restart.", None),
+        ("telegram-capture", "Add /idea capture path from Telegram", "Clever Cockpit", "waiting", "Outcome: capture a Telegram message or command into Cockpit Ideas. Scope: command contract, source link, title/body extraction, and API call. Blocker: choose routing shape.", None),
     ],
     "activity": [
         ("Clever Cockpit local service initialized", "System", "done", "normal", "SQLite-backed LAN-capable cockpit service is ready."),
@@ -510,7 +510,8 @@ class Handler(SimpleHTTPRequestHandler):
                         task_id = f"{project_id}-next"
                         conn.execute("insert or ignore into projects values (?,?,?,?,?,?,?)", (project_id, idea["title"], "draft", "Draft project created from approved idea. Confirm before making active.", idea_id, t, t))
                         task_title = f"Implement: {idea['title']}" if action == "task" else f"Define next step: {idea['title']}"
-                        conn.execute("insert or ignore into tasks(id,title,project,status,body,source_idea_id,created_at,updated_at,trigger,run_status) values (?,?,?,?,?,?,?,?,?,?)", (task_id, task_title, idea["title"], "open", "Created from approved idea. Trigger defaults to manual; press Run to queue execution or Schedule for 04:30 MSK.", idea_id, t, t, "manual", "idle"))
+                        task_body = "Outcome: turn the approved idea into one clear next action. Scope: clarify owner, expected artifact, and done criteria before running. Done when: the project/task relationship is explicit and the next execution step is unambiguous. Trigger defaults to manual; press Run to queue execution or Schedule for 04:30 MSK."
+                        conn.execute("insert or ignore into tasks(id,title,project,status,body,source_idea_id,created_at,updated_at,trigger,run_status) values (?,?,?,?,?,?,?,?,?,?)", (task_id, task_title, idea["title"], "open", task_body, idea_id, t, t, "manual", "idle"))
                         add_activity(conn, f"Converted idea: {idea['title']}", "Created draft project/task follow-up with manual trigger.", "Idea", "approved", "high")
                     conn.commit()
                 elif parsed.path == "/api/tasks/transition":

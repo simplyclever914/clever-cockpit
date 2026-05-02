@@ -57,6 +57,8 @@ scripts/create-cockpit-approval.py \
 
 Important: schedules execute their normal work directly by default. Use typed approvals only for explicit gates or separate idea decisions.
 
+Task hygiene rule: every task must be concrete before it is created or run. Write a clear description with outcome, scope, done criteria, and any blocker/trigger. Avoid umbrella titles like “Continue MVP”; split them into executable next actions. In the UI, task descriptions are intentionally hidden under a spoiler (`<details>`) so lists stay scannable without losing definition.
+
 Schedules that discover follow-up ideas can record them without blocking delivery:
 
 ```bash

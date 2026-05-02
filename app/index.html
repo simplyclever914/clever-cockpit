@@ -114,6 +114,10 @@
     .item-top { display:flex; gap:10px; align-items:flex-start; justify-content:space-between; }
     .item h4 { margin:4px 0 8px; font-size:15px; }
     .item p { margin:0; color:var(--muted); font-size:13px; line-height:1.45; }
+    .task-description { margin-top:8px; color:var(--muted); font-size:13px; line-height:1.45; }
+    .task-description summary { cursor:pointer; color:var(--soft); font-size:12px; user-select:none; }
+    .task-description[open] summary { margin-bottom:6px; }
+    .task-description p { margin:6px 0 0; }
     .item-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
     .link-btn { border:1px solid var(--border2); border-radius:999px; background:color-mix(in srgb,var(--blue) 9%, transparent); color:var(--blue); padding:5px 9px; cursor:pointer; font-size:12px; }
     .link-btn:hover { border-color:color-mix(in srgb,var(--blue) 45%, transparent); background:color-mix(in srgb,var(--blue) 15%, transparent); }
@@ -280,6 +284,7 @@
                 <div class="item"><h4>Idea ≠ commitment</h4><p>Идея — это captured signal. Она ждёт решения: развивать, превратить в маленькую задачу, отложить или закрыть.</p></div>
                 <div class="item"><h4>Approved idea → draft project</h4><p>OK по идее создаёт draft project + first task. Активным проект становится только после подтверждения outcome/приоритета.</p></div>
                 <div class="item"><h4>Task = next action</h4><p>Задача должна быть исполнимой: один понятный шаг, статус, привязка к проекту или source idea.</p></div>
+                <div class="item"><h4>Define before running</h4><p>У каждой задачи должно быть описание: outcome, scope, done criteria и blocker/trigger. В списках описание спрятано под spoiler, чтобы не шуметь.</p></div>
                 <div class="item"><h4>Schedules run by default</h4><p>Расписания делают свою работу без approval, если Вадим явно не поставил gate. Approval нужен для отдельных решений/новых идей.</p></div>
                 <div class="item"><h4>Approvals are explicit gates</h4><p>OK/Deny в Approvals не “просто заметка”: runner забирает approved action и выполняет только allowlisted handler.</p></div>
                 <div class="item"><h4>Activity closes the loop</h4><p>Каждый запуск, публикация, ошибка или результат попадает в отдельный раздел Activity и может породить новую идею/таск.</p></div>
@@ -330,11 +335,11 @@ const seedState = () => ({
     { name: 'Daily AI wrap-up', schedule: 'cron 30 9 * * * (Europe/Moscow)', enabled: true, last_run_at: null, next_run_at: null, last_status: 'never', description: 'Generate, publish, send, and pin the daily AI/agentic dev digest.' }
   ],
   tasks: [
-    { id: 'schema', title: 'Define idea lifecycle schema', project: 'Clever Cockpit', status: 'open', body: 'idea → decision → project/task → done/parked' },
-    { id: 'ok-deny', title: 'Add OK/Deny actions to approval cards', project: 'Clever Cockpit', status: 'done', body: 'Prototype interaction + future backend API' },
-    { id: 'local-store', title: 'Create local JSON/SQLite store proposal', project: 'Clever Cockpit', status: 'open', body: 'No Supabase until value is proven' },
-    { id: 'telegram-capture', title: 'Add /idea capture path from Telegram', project: 'Clever Cockpit', status: 'waiting', body: 'Needs command/message routing design' },
-    { id: 'digest-gates', title: 'Make digest gates reusable', project: 'Daily Reviews Pipeline', status: 'open', body: 'One script for AI + Telegram reviews' }
+    { id: 'schema', title: 'Define idea lifecycle schema', project: 'Clever Cockpit', status: 'open', body: 'Outcome: document the idea → decision → project/task → done/parked lifecycle. Scope: statuses, required links, and transition rules. Done when: UI and API use the same lifecycle terms.' },
+    { id: 'ok-deny', title: 'Add OK/Deny actions to approval cards', project: 'Clever Cockpit', status: 'done', body: 'Outcome: make approval decisions explicit. Scope: prototype OK/Deny controls and future backend API. Done when: no pending approval lacks a clear action.' },
+    { id: 'local-store', title: 'Create local JSON/SQLite store proposal', project: 'Clever Cockpit', status: 'open', body: 'Outcome: persist cockpit state locally. Scope: SQLite schema and state API; Supabase is out of scope for MVP. Done when: ideas/projects/tasks survive restart.' },
+    { id: 'telegram-capture', title: 'Add /idea capture path from Telegram', project: 'Clever Cockpit', status: 'waiting', body: 'Outcome: capture a Telegram message or command into Cockpit Ideas. Scope: command contract, source link, title/body extraction, and API call. Blocker: choose routing shape.' },
+    { id: 'digest-gates', title: 'Make digest gates reusable', project: 'Daily Reviews Pipeline', status: 'open', body: 'Outcome: reuse quality gates across AI and Telegram reviews. Scope: source count, stale data, required sections, local path leak, HTTP 200. Done when: one script can validate both pipelines.' }
   ]
 });
 
@@ -401,6 +406,7 @@ function loadState() {
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 async function resetDemo() { if (apiAvailable) { normalizeApiState(await api('/api/reset', {})); renderAll(); return; } state = seedState(); saveState(); renderAll(); }
 function escapeHtml(s='') { return String(s).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+function taskDescription(t, label='Description') { return `<details class="task-description"><summary>${escapeHtml(label)}</summary><p>${escapeHtml(t.body || 'No task description yet — clarify scope, done criteria, and expected outcome before running.')}</p></details>`; }
 function pill(text, cls='') { return `<span class="pill ${cls}">${escapeHtml(text)}</span>`; }
 function legend(items, title='Legend') {
   return `<div class="legend"><span class="legend-title">${escapeHtml(title)}</span>${items.map(([label, meaning, cls='']) => `<span class="legend-item">${pill(label, cls)} <span>${escapeHtml(meaning)}</span></span>`).join('')}</div>`;
@@ -587,7 +593,7 @@ function renderTasks() {
   root.innerHTML = tasks.length ? tasks.map(t => {
     const project = projectForTask(t);
     const scheduled = t.scheduled_for ? `<span>Scheduled: ${formatTime(t.scheduled_for)}</span>` : '';
-    return `<div class="item" data-task="${escapeHtml(t.id)}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="item-top"><div><div class="pill-row">${pill(t.project || 'project','blue')} ${pill(t.status || '', statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))}</div><h4>${escapeHtml(t.title)}</h4><p>${escapeHtml(t.body)}</p></div></div><div class="relation-row"><span>Project:</span>${linkedProjectButton(project, 'Open')} ${scheduled}</div>${taskActionButtons(t)}</div>`;
+    return `<div class="item" data-task="${escapeHtml(t.id)}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="item-top"><div><div class="pill-row">${pill(t.project || 'project','blue')} ${pill(t.status || '', statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))}</div><h4>${escapeHtml(t.title)}</h4>${taskDescription(t)}</div></div><div class="relation-row"><span>Project:</span>${linkedProjectButton(project, 'Open')} ${scheduled}</div>${taskActionButtons(t)}</div>`;
   }).join('') : `<div class="empty">No ${escapeHtml(taskFilter)} tasks</div>`;
 }
 function formatTime(value) {
@@ -693,14 +699,14 @@ function openProjectDrawer(id, highlightTaskId='') {
   const idea = ideaForProject(project);
   const tasks = tasksForProject(project);
   const active = highlightTaskId || (tasks.find(t => t.status === 'open') || tasks[0])?.id || '';
-  const taskList = tasks.length ? tasks.map(t => `<div class="item ${t.id === active ? 'active-task' : ''}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="pill-row">${pill(t.status, statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))} ${t.id === active ? pill('active task','good') : ''}</div><h4>${escapeHtml(t.title)}</h4><p>${escapeHtml(t.body)}</p><div class="relation-row"><span>Project:</span>${pill(project.title, 'blue')}</div>${taskActionButtons(t)}</div>`).join('') : '<div class="empty">No linked tasks yet</div>';
+  const taskList = tasks.length ? tasks.map(t => `<div class="item ${t.id === active ? 'active-task' : ''}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="pill-row">${pill(t.status, statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))} ${t.id === active ? pill('active task','good') : ''}</div><h4>${escapeHtml(t.title)}</h4>${taskDescription(t)}<div class="relation-row"><span>Project:</span>${pill(project.title, 'blue')}</div>${taskActionButtons(t)}</div>`).join('') : '<div class="empty">No linked tasks yet</div>';
   openDrawer(`${drawerHead(project.title, 'Project details + linked tasks')}<div class="pill-row">${pill(project.status, statusClass(project.status))}</div><p>${escapeHtml(project.body)}</p><div class="drawer-section"><h4>Source idea</h4><div class="relation-row">${linkedIdeaButton(idea) || '<span class="pill blue">no source idea recorded</span>'}</div></div><div class="drawer-section"><h4>Tasks linked to this project</h4>${taskList}</div>`);
 }
 function openTaskDrawer(id) {
   const task = state.tasks.find(t => t.id === id); if (!task) return;
   const project = projectForTask(task);
   const runMeta = `${task.scheduled_for ? `<div>Scheduled for</div><div>${formatTime(task.scheduled_for)}</div>` : ''}${task.last_run_at ? `<div>Last run</div><div>${formatTime(task.last_run_at)}</div>` : ''}${task.last_error ? `<div>Last error</div><div>${escapeHtml(task.last_error)}</div>` : ''}`;
-  openDrawer(`${drawerHead(task.title, 'Task details')}<div class="pill-row">${pill(task.status, statusClass(task.status))} ${pill(task.trigger || 'manual','blue')} ${pill(task.run_status || 'idle', taskRunClass(task.run_status || 'idle'))}</div><p>${escapeHtml(task.body)}</p><div class="kv"><div>Trigger</div><div>${escapeHtml(task.trigger || 'manual')}</div><div>Run status</div><div>${escapeHtml(task.run_status || 'idle')}</div>${runMeta}</div><div class="drawer-section"><h4>Execution</h4>${taskActionButtons(task)}</div><div class="drawer-section"><h4>Project</h4><div class="relation-row">${linkedProjectButton(project)}</div></div>${project ? `<div class="drawer-section"><button class="btn primary" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}" data-task="${escapeHtml(task.id)}">Open project task list with this task highlighted</button></div>` : ''}`);
+  openDrawer(`${drawerHead(task.title, 'Task details')}<div class="pill-row">${pill(task.status, statusClass(task.status))} ${pill(task.trigger || 'manual','blue')} ${pill(task.run_status || 'idle', taskRunClass(task.run_status || 'idle'))}</div>${taskDescription(task)}<div class="kv"><div>Trigger</div><div>${escapeHtml(task.trigger || 'manual')}</div><div>Run status</div><div>${escapeHtml(task.run_status || 'idle')}</div>${runMeta}</div><div class="drawer-section"><h4>Execution</h4>${taskActionButtons(task)}</div><div class="drawer-section"><h4>Project</h4><div class="relation-row">${linkedProjectButton(project)}</div></div>${project ? `<div class="drawer-section"><button class="btn primary" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}" data-task="${escapeHtml(task.id)}">Open project task list with this task highlighted</button></div>` : ''}`);
 }
 function showView(v) {
   $$('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -724,6 +730,7 @@ $('#view-ideas .approval-alert button').onclick = () => showView('approvals');
 $('#drawer-backdrop').onclick = closeDrawer;
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeDrawer(); });
 document.addEventListener('click', (event) => {
+  if (event.target.closest('.task-description')) { event.stopPropagation(); return; }
   const btn = event.target.closest('[data-action]');
   if (!btn) return;
   event.stopPropagation();
