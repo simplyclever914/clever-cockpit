@@ -315,6 +315,7 @@ def meaningful_activity(items: list[dict], limit: int = 50) -> list[dict]:
 def state(conn: sqlite3.Connection) -> dict:
     return {
         "approvals": rows(conn, "approvals", "where status='pending'"),
+        "held_approvals": rows(conn, "approvals", "where status='hold'"),
         "ideas": rows(conn, "ideas"),
         "projects": rows(conn, "projects"),
         "tasks": rows(conn, "tasks"),
@@ -564,6 +565,8 @@ class Handler(SimpleHTTPRequestHandler):
                 elif parsed.path == "/api/approvals/decide":
                     approval_id = data["id"]
                     decision = data.get("decision", "accepted")
+                    if decision not in {"accepted", "rejected", "hold", "pending"}:
+                        self.send_json({"error": "invalid approval decision"}, 400); return
                     row = conn.execute("select * from approvals where id=?", (approval_id,)).fetchone()
                     if not row:
                         self.send_json({"error": "approval not found"}, 404); return

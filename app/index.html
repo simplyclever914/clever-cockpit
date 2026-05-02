@@ -255,7 +255,7 @@
 
       <section id="view-schedules" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Schedules</h3><div class="tabs"><button class="tab active">OpenClaw cron</button></div></div><p style="color:var(--muted);margin-top:0">Configured cron activities with last run, next run, and the result of the latest execution.</p><div id="legend-schedules"></div><div id="schedule-list"></div></div></section>
       <section id="view-runs" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Runs</h3><div class="tabs"><button class="tab active">Subagents</button><button class="tab">Commands</button></div></div><div id="legend-runs"></div><div id="run-list"></div></div></section>
-      <section id="view-approvals" class="view hidden"><div class="card panel approval-alert"><div class="panel-head"><h3 style="display:flex;align-items:center;gap:10px"><span class="pulse"></span>Approvals need decision</h3><button class="btn primary">OK safe batch</button></div><p style="color:var(--muted);margin-top:0">Каждая карточка должна иметь явный исход: OK, Deny или Details/Comment. Никаких подвешенных внешних действий.</p><div id="legend-approvals"></div><div id="approval-list"></div></div></section>
+      <section id="view-approvals" class="view hidden"><div class="card panel approval-alert"><div class="panel-head"><h3 style="display:flex;align-items:center;gap:10px"><span class="pulse"></span>Approvals need decision</h3><button class="btn primary">OK safe batch</button></div><p style="color:var(--muted);margin-top:0">Каждая карточка должна иметь явный исход: OK, Deny, Hold или Details/Comment. Никаких подвешенных внешних действий.</p><div id="legend-approvals"></div><div id="approval-list"></div></div><div class="card panel"><div class="panel-head"><h3>Long box / hold</h3></div><p style="color:var(--muted);margin-top:0">Идеи и решения, которые не требуют внимания сейчас. Они не входят в pending Approvals и не раздувают красный счётчик.</p><div id="held-approval-list"></div></div></section>
       <section id="view-ideas" class="view">
         <div class="card panel approval-alert"><div class="panel-head" style="margin-bottom:6px"><h3 style="display:flex;align-items:center;gap:10px"><span class="pulse"></span>2 approvals need decision</h3><button class="btn primary" onclick="document.querySelector('[data-view=approvals]').click()">Review now</button></div><p style="color:var(--muted);margin:0">Есть pending OK/Deny. Пока они не разобраны, они подсвечиваются поверх идей, чтобы решения не терялись.</p></div>
         <div class="grid stats">
@@ -399,6 +399,7 @@ function normalizeApiState(data) {
   data = data.state || data;
   const theme = currentTheme();
   state.approvals = data.approvals || [];
+  state.held_approvals = data.held_approvals || [];
   state.ideas = data.ideas || [];
   state.projects = data.projects || [];
   state.tasks = data.tasks || [];
@@ -408,7 +409,7 @@ function normalizeApiState(data) {
 }
 function stateSignature(data) {
   data = data.state || data;
-  return JSON.stringify({ approvals:data.approvals || [], ideas:data.ideas || [], projects:data.projects || [], tasks:data.tasks || [], activity:data.activity || [], schedules:data.schedules || [] });
+  return JSON.stringify({ approvals:data.approvals || [], held_approvals:data.held_approvals || [], ideas:data.ideas || [], projects:data.projects || [], tasks:data.tasks || [], activity:data.activity || [], schedules:data.schedules || [] });
 }
 function isEditingTask() { return Boolean(document.querySelector('#detail-drawer.open form[data-task-edit]')); }
 function showSyncIndicator(text, tone='') {
@@ -612,7 +613,9 @@ function simpleList(id, rows, type) {
 }
 function renderApprovals() {
   const root = $('#approval-list');
-  root.innerHTML = state.approvals.length ? state.approvals.map(a => `<div class="item" data-approval="${a.id}"><div class="item-top"><div><div class="pill-row">${pill(a.kind,'blue')} ${pill(a.priority,priorityClass(a.priority))} ${a.handler ? pill(a.handler,'blue') : ''} ${a.run_status ? pill(a.run_status,statusClass(a.run_status)) : ''}</div><h4>${escapeHtml(a.title)}</h4><p>${escapeHtml(a.body)}</p></div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${a.id}">OK</button><button class="btn" data-action="deny" data-id="${a.id}">Deny</button><button class="btn" data-action="details" data-id="${a.id}">Details</button></div></div>`).join('') : '<div class="empty">No approvals pending. Ideas can flow normally.</div>';
+  root.innerHTML = state.approvals.length ? state.approvals.map(a => `<div class="item" data-approval="${a.id}"><div class="item-top"><div><div class="pill-row">${pill(a.kind,'blue')} ${pill(a.priority,priorityClass(a.priority))} ${a.handler ? pill(a.handler,'blue') : ''} ${a.run_status ? pill(a.run_status,statusClass(a.run_status)) : ''}</div><h4>${escapeHtml(a.title)}</h4><p>${escapeHtml(a.body)}</p></div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${a.id}">OK</button><button class="btn" data-action="deny" data-id="${a.id}">Deny</button><button class="btn" data-action="hold-approval" data-id="${a.id}">Hold</button><button class="btn" data-action="details" data-id="${a.id}">Details</button></div></div>`).join('') : '<div class="empty">No approvals pending. Ideas can flow normally.</div>';
+  const heldRoot = $('#held-approval-list');
+  if (heldRoot) heldRoot.innerHTML = (state.held_approvals || []).length ? state.held_approvals.map(a => `<div class="item" data-approval="${a.id}"><div class="item-top"><div><div class="pill-row">${pill('hold','warn')} ${pill(a.kind,'blue')} ${pill(a.priority,priorityClass(a.priority))}</div><h4>${escapeHtml(a.title)}</h4><p>${escapeHtml(a.body)}</p></div></div><div class="item-actions"><button class="btn" data-action="unhold-approval" data-id="${a.id}">Return to pending</button><button class="btn" data-action="details" data-id="${a.id}">Details</button></div></div>`).join('') : '<div class="empty">Long box is empty.</div>';
 }
 function renderIdeas() {
   const lanes = { proposed: $('#ideas-proposed'), review: $('#ideas-review'), approved: $('#ideas-approved'), done: $('#ideas-done') };
@@ -714,11 +717,14 @@ function renderAll() {
 }
 
 async function decideApproval(id, decision) {
-  if (apiAvailable) { applyApiState(await api('/api/approvals/decide', { id, decision: decision === 'ok' ? 'accepted' : 'rejected' }), { force:true }); return; }
-  const approval = state.approvals.find(a => a.id === id);
+  const apiDecision = decision === 'ok' ? 'accepted' : decision === 'hold' ? 'hold' : decision === 'pending' ? 'pending' : 'rejected';
+  if (apiAvailable) { applyApiState(await api('/api/approvals/decide', { id, decision: apiDecision }), { force:true }); return; }
+  const approval = state.approvals.find(a => a.id === id) || (state.held_approvals || []).find(a => a.id === id);
   if (!approval) return;
   state.approvals = state.approvals.filter(a => a.id !== id);
-  activity(`${decision === 'ok' ? 'Approved' : 'Denied'}: ${approval.title}`, approval.body, 'Approval', decision === 'ok' ? 'approved' : 'rejected', approval.priority);
+  state.held_approvals = (state.held_approvals || []).filter(a => a.id !== id);
+  if (decision === 'pending') state.approvals.push({ ...approval, status:'pending' });
+  activity(`${decision === 'ok' ? 'Approved' : decision === 'hold' ? 'Held' : decision === 'pending' ? 'Returned to pending' : 'Denied'}: ${approval.title}`, approval.body, 'Approval', decision === 'ok' ? 'approved' : decision === 'hold' ? 'hold' : decision === 'pending' ? 'pending' : 'rejected', approval.priority);
   renderAll();
 }
 async function convertIdea(id, mode) {
@@ -834,8 +840,10 @@ document.addEventListener('click', (event) => {
   const { action, id } = btn.dataset;
   if (action === 'approve') decideApproval(id, 'ok').catch(err => alert(err.message));
   if (action === 'deny') decideApproval(id, 'deny').catch(err => alert(err.message));
+  if (action === 'hold-approval') decideApproval(id, 'hold').catch(err => alert(err.message));
+  if (action === 'unhold-approval') decideApproval(id, 'pending').catch(err => alert(err.message));
   if (action === 'details') {
-    const a = state.approvals.find(a => a.id === id);
+    const a = state.approvals.find(a => a.id === id) || (state.held_approvals || []).find(a => a.id === id);
     alert(a ? `${a.title}\n\n${a.body}\n\nHandler: ${a.handler || 'record_only'}\nRun: ${a.run_status || 'pending'}\nPayload: ${a.payload_json || '{}'}` : 'No details');
   }
   if (action === 'idea-ok') convertIdea(id, 'ok').catch(err => alert(err.message));
