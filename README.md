@@ -13,12 +13,27 @@ This repository is intentionally SDD-first using vanilla Fission-AI/OpenSpec: pr
   - approved ideas become project/task material rather than dead chat notes.
 - Vanilla OpenSpec `spec-driven` change in `openspec/changes/initial-cockpit/`.
 
-## Run locally
+
+## Run as local/LAN app
+
+Localhost (API token not required):
 
 ```bash
-python3 -m http.server 8765 --directory app
+python3 server/cockpit_server.py --host 127.0.0.1 --port 8765
 # open http://127.0.0.1:8765/
 ```
+
+LAN mode (token required by default):
+
+```bash
+python3 server/cockpit_server.py --host 0.0.0.0 --port 8765
+# the server prints: http://<host>:8765/?token=<token>
+```
+
+State is stored in `data/cockpit.sqlite`. The LAN token is stored in `data/token` with local-only permissions when possible. Do not expose this service to the public internet.
+
+Approval semantics are intentionally status-only: OK/Deny updates Cockpit state. OpenClaw/Clever must check that status before continuing any external action.
+
 
 ## Validate
 

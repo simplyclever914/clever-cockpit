@@ -1,0 +1,314 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import secrets
+import sqlite3
+import sys
+from datetime import datetime, timezone
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+ROOT = Path(__file__).resolve().parents[1]
+APP_DIR = ROOT / "app"
+DATA_DIR = ROOT / "data"
+DB_PATH = Path(os.environ.get("CLEVER_COCKPIT_DB", DATA_DIR / "cockpit.sqlite"))
+TOKEN_FILE = DATA_DIR / "token"
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def slugify(text: str) -> str:
+    out = []
+    prev_dash = False
+    for ch in text.lower():
+        if ch.isalnum():
+            out.append(ch)
+            prev_dash = False
+        elif not prev_dash:
+            out.append("-")
+            prev_dash = True
+    value = "".join(out).strip("-")[:60]
+    return value or f"item-{secrets.token_hex(4)}"
+
+
+SCHEMA = """
+create table if not exists approvals (
+  id text primary key,
+  title text not null,
+  kind text not null default 'approval',
+  priority text not null default 'normal',
+  body text not null default '',
+  status text not null default 'pending',
+  created_at text not null,
+  updated_at text not null
+);
+create table if not exists ideas (
+  id text primary key,
+  title text not null,
+  body text not null default '',
+  status text not null default 'proposed',
+  source text,
+  created_at text not null,
+  updated_at text not null
+);
+create table if not exists projects (
+  id text primary key,
+  title text not null,
+  status text not null default 'draft',
+  body text not null default '',
+  source_idea_id text,
+  created_at text not null,
+  updated_at text not null
+);
+create table if not exists tasks (
+  id text primary key,
+  title text not null,
+  project text not null default 'Inbox',
+  status text not null default 'open',
+  body text not null default '',
+  source_idea_id text,
+  created_at text not null,
+  updated_at text not null
+);
+create table if not exists activity (
+  id integer primary key autoincrement,
+  title text not null,
+  kind text not null default 'Activity',
+  status text not null default 'done',
+  priority text not null default 'normal',
+  body text not null default '',
+  created_at text not null
+);
+"""
+
+SEED = {
+    "approvals": [
+        ("publish-page", "Publish new external page", "external_action", "urgent", "Public SourceCraft page requires explicit approval unless already requested."),
+        ("send-pin", "Send/pin digest to Telegram", "messaging", "high", "Allowed only after successful generation, publication, and verification."),
+    ],
+    "ideas": [
+        ("cockpit-memory", "Clever Cockpit as idea/task memory", "Decision needed: build local MVP so good ideas from chat become tracked projects/tasks. Next: define datastore.", "review", "chat"),
+        ("telegram-idea-command", "Telegram command: /idea", "Capture current message/thread into Ideas with source link, tags, and suggested next action.", "proposed", "chat"),
+        ("auto-convert", "Auto-convert approved idea to project", "When Вадим clicks OK: create project card + first 2-3 tasks + review date.", "approved", "chat"),
+        ("digest-gate", "Digest quality gate", "Before publish: required sections, source count, stale index, local path leak, HTTP 200.", "approved", "chat"),
+        ("oauth-audit", "OAuth/app permission audit", "Periodic checklist for GitHub/Cursor/Claude/Codex access hygiene.", "done", "chat"),
+    ],
+    "projects": [
+        ("clever-cockpit", "Clever Cockpit", "active", "Goal: stop losing ideas/tasks in chat; source: BentoBoard-inspired prototype", None),
+        ("daily-reviews", "Daily Reviews Pipeline", "active", "AI wrap-up + Telegram review + quality gates + SourceCraft publish", None),
+        ("tooling-sync", "Tooling Sync Discipline", "maintenance", "Dirty reminder, auto-discovery, GitHub push hygiene", None),
+    ],
+    "tasks": [
+        ("schema", "Define idea lifecycle schema", "Clever Cockpit", "open", "idea → decision → project/task → done/parked", None),
+        ("local-store", "Create local SQLite store", "Clever Cockpit", "open", "SQLite from the start; no Supabase for MVP", None),
+        ("telegram-capture", "Add /idea capture path from Telegram", "Clever Cockpit", "waiting", "Needs command/message routing design", None),
+    ],
+    "activity": [
+        ("Clever Cockpit local service initialized", "System", "done", "normal", "SQLite-backed LAN-capable cockpit service is ready."),
+    ],
+}
+
+
+def connect() -> sqlite3.Connection:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.executescript(SCHEMA)
+    return conn
+
+
+def seed(conn: sqlite3.Connection, force: bool = False) -> None:
+    if force:
+        conn.executescript("delete from approvals; delete from ideas; delete from projects; delete from tasks; delete from activity;")
+    if conn.execute("select count(*) from ideas").fetchone()[0]:
+        return
+    t = now()
+    conn.executemany("insert or ignore into approvals values (?,?,?,?,?,?,?,?)", [(a,b,c,d,e,"pending",t,t) for a,b,c,d,e in SEED["approvals"]])
+    conn.executemany("insert or ignore into ideas values (?,?,?,?,?,?,?)", [(a,b,c,d,e,t,t) for a,b,c,d,e in SEED["ideas"]])
+    conn.executemany("insert or ignore into projects values (?,?,?,?,?,?,?)", [(a,b,c,d,e,t,t) for a,b,c,d,e in SEED["projects"]])
+    conn.executemany("insert or ignore into tasks values (?,?,?,?,?,?,?,?)", [(a,b,c,d,e,f,t,t) for a,b,c,d,e,f in SEED["tasks"]])
+    conn.executemany("insert into activity(title,kind,status,priority,body,created_at) values (?,?,?,?,?,?)", [(a,b,c,d,e,t) for a,b,c,d,e in SEED["activity"]])
+    conn.commit()
+
+
+def rows(conn: sqlite3.Connection, table: str, where: str = "", args: tuple = ()) -> list[dict]:
+    order = "created_at desc"
+    if table == "ideas":
+        order = "updated_at desc"
+    return [dict(r) for r in conn.execute(f"select * from {table} {where} order by {order}", args)]
+
+
+def add_activity(conn: sqlite3.Connection, title: str, body: str = "", kind: str = "Activity", status: str = "done", priority: str = "normal") -> None:
+    conn.execute("insert into activity(title,kind,status,priority,body,created_at) values (?,?,?,?,?,?)", (title, kind, status, priority, body, now()))
+
+
+def state(conn: sqlite3.Connection) -> dict:
+    return {
+        "approvals": rows(conn, "approvals", "where status='pending'"),
+        "ideas": rows(conn, "ideas"),
+        "projects": rows(conn, "projects"),
+        "tasks": rows(conn, "tasks"),
+        "activity": rows(conn, "activity")[:50],
+    }
+
+
+def ensure_token() -> str:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    env = os.environ.get("CLEVER_COCKPIT_TOKEN")
+    if env:
+        return env.strip()
+    if TOKEN_FILE.exists():
+        return TOKEN_FILE.read_text().strip()
+    token = secrets.token_urlsafe(24)
+    TOKEN_FILE.write_text(token)
+    try:
+        TOKEN_FILE.chmod(0o600)
+    except OSError:
+        pass
+    return token
+
+
+class Handler(SimpleHTTPRequestHandler):
+    server_version = "CleverCockpit/0.1"
+
+    def __init__(self, *args, token: str, require_token: bool, **kwargs):
+        self.token = token
+        self.require_token = require_token
+        super().__init__(*args, directory=str(APP_DIR), **kwargs)
+
+    def end_headers(self) -> None:
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+    def auth_ok(self) -> bool:
+        if not self.require_token:
+            return True
+        parsed = urlparse(self.path)
+        query_token = parse_qs(parsed.query).get("token", [None])[0]
+        header = self.headers.get("Authorization", "")
+        bearer = header.removeprefix("Bearer ").strip() if header.startswith("Bearer ") else None
+        return query_token == self.token or bearer == self.token
+
+    def send_json(self, data: object, status_code: int = 200) -> None:
+        body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def read_json(self) -> dict:
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        if not length:
+            return {}
+        return json.loads(self.rfile.read(length).decode("utf-8"))
+
+    def do_GET(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/"):
+            if not self.auth_ok():
+                self.send_json({"error": "unauthorized"}, 401)
+                return
+            with connect() as conn:
+                seed(conn)
+                if parsed.path == "/api/state":
+                    self.send_json(state(conn))
+                else:
+                    self.send_json({"error": "not found"}, 404)
+            return
+        super().do_GET()
+
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        if not parsed.path.startswith("/api/"):
+            self.send_json({"error": "not found"}, 404)
+            return
+        if not self.auth_ok():
+            self.send_json({"error": "unauthorized"}, 401)
+            return
+        data = self.read_json()
+        try:
+            with connect() as conn:
+                seed(conn)
+                if parsed.path == "/api/reset":
+                    seed(conn, force=True)
+                elif parsed.path == "/api/approvals/decide":
+                    approval_id = data["id"]
+                    decision = data.get("decision", "accepted")
+                    row = conn.execute("select * from approvals where id=?", (approval_id,)).fetchone()
+                    if not row:
+                        self.send_json({"error": "approval not found"}, 404); return
+                    conn.execute("update approvals set status=?, updated_at=? where id=?", (decision, now(), approval_id))
+                    add_activity(conn, f"Approval {decision}: {row['title']}", row["body"], "Approval", decision, row["priority"])
+                    conn.commit()
+                elif parsed.path == "/api/ideas":
+                    title = (data.get("title") or "").strip()
+                    if not title:
+                        self.send_json({"error": "title required"}, 400); return
+                    body = (data.get("body") or "").strip()
+                    source = data.get("source") or "manual"
+                    item_id = data.get("id") or f"{slugify(title)}-{secrets.token_hex(3)}"
+                    t = now()
+                    conn.execute("insert into ideas values (?,?,?,?,?,?,?)", (item_id, title, body, "proposed", source, t, t))
+                    add_activity(conn, f"Captured idea: {title}", body, "Idea", "proposed")
+                    conn.commit()
+                elif parsed.path == "/api/ideas/transition":
+                    idea_id = data["id"]
+                    action = data.get("action", "ok")
+                    idea = conn.execute("select * from ideas where id=?", (idea_id,)).fetchone()
+                    if not idea:
+                        self.send_json({"error": "idea not found"}, 404); return
+                    t = now()
+                    if action == "deny":
+                        conn.execute("update ideas set status='done', updated_at=? where id=?", (t, idea_id))
+                        add_activity(conn, f"Parked idea: {idea['title']}", idea["body"], "Idea", "done")
+                    else:
+                        conn.execute("update ideas set status='approved', updated_at=? where id=?", (t, idea_id))
+                        project_id = slugify(idea["title"])
+                        task_id = f"{project_id}-next"
+                        conn.execute("insert or ignore into projects values (?,?,?,?,?,?,?)", (project_id, idea["title"], "draft", "Draft project created from approved idea. Confirm before making active.", idea_id, t, t))
+                        task_title = f"Implement: {idea['title']}" if action == "task" else f"Define next step: {idea['title']}"
+                        conn.execute("insert or ignore into tasks values (?,?,?,?,?,?,?,?)", (task_id, task_title, idea["title"], "open", "Created from approved idea.", idea_id, t, t))
+                        add_activity(conn, f"Converted idea: {idea['title']}", "Created draft project/task follow-up.", "Idea", "approved", "high")
+                    conn.commit()
+                else:
+                    self.send_json({"error": "not found"}, 404); return
+                self.send_json(state(conn))
+        except Exception as exc:
+            self.send_json({"error": str(exc)}, 500)
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--token", default=None)
+    ap.add_argument("--no-token", action="store_true", help="Disable token check; only safe on localhost")
+    ap.add_argument("--reset", action="store_true", help="Reset SQLite demo data before serving")
+    args = ap.parse_args(argv)
+
+    with connect() as conn:
+        seed(conn, force=args.reset)
+    token = args.token or ensure_token()
+    require_token = not args.no_token and args.host not in {"127.0.0.1", "localhost", "::1"}
+    if args.no_token and args.host not in {"127.0.0.1", "localhost", "::1"}:
+        print("WARNING: token disabled on LAN bind; this exposes private data", file=sys.stderr)
+    handler = lambda *h_args, **h_kwargs: Handler(*h_args, token=token, require_token=require_token, **h_kwargs)
+    httpd = ThreadingHTTPServer((args.host, args.port), handler)
+    print(f"Clever Cockpit serving http://{args.host}:{args.port}/")
+    if require_token:
+        print(f"LAN token required. Open with: http://<host>:{args.port}/?token={token}")
+    else:
+        print("Token check disabled for localhost/default mode." if args.no_token else "Localhost mode: API token not required.")
+    httpd.serve_forever()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

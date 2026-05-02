@@ -27,6 +27,18 @@ REQUIRED_MARKERS = [
     'decideApproval',
     'convertIdea',
     'data-action="idea-task"',
+    '/api/state',
+    '/api/approvals/decide',
+    '/api/ideas/transition',
+    'apiAvailable',
+    'clever-cockpit-token',
+]
+SERVER_MARKERS = [
+    'ThreadingHTTPServer',
+    'sqlite3',
+    'CLEVER_COCKPIT_TOKEN',
+    '/api/state',
+    '/api/ideas/transition',
 ]
 FORBIDDEN_MARKERS = [
     'data-view="architecture"',
@@ -53,6 +65,14 @@ def main() -> int:
     for marker in FORBIDDEN_MARKERS:
         if marker in text:
             errors.append(f'forbidden marker present: {marker}')
+
+    server_text = (ROOT / 'server' / 'cockpit_server.py').read_text(encoding='utf-8')
+    for marker in SERVER_MARKERS:
+        if marker not in server_text:
+            errors.append(f'missing server marker: {marker}')
+    py_compile = subprocess.run([sys.executable, '-m', 'py_compile', str(ROOT / 'server' / 'cockpit_server.py')], cwd=ROOT, text=True, capture_output=True)
+    if py_compile.returncode != 0:
+        errors.append('server py_compile failed:\n' + (py_compile.stderr.strip() or py_compile.stdout.strip()))
 
     cmd = openspec_cmd() + ['validate', '--changes', '--json']
     result = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True)
