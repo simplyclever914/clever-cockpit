@@ -21,6 +21,12 @@ REQUIRED_MARKERS = [
     'data-view="tasks"',
     'Captured ideas',
     'Converted to tasks',
+    'STORAGE_KEY',
+    'localStorage',
+    'reset-demo',
+    'decideApproval',
+    'convertIdea',
+    'data-action="idea-task"',
 ]
 FORBIDDEN_MARKERS = [
     'data-view="architecture"',
@@ -48,7 +54,7 @@ def main() -> int:
         if marker in text:
             errors.append(f'forbidden marker present: {marker}')
 
-    cmd = openspec_cmd() + ['validate', 'initial-cockpit', '--json', '--no-interactive']
+    cmd = openspec_cmd() + ['validate', '--changes', '--json']
     result = subprocess.run(cmd, cwd=ROOT, text=True, capture_output=True)
     if result.returncode != 0:
         errors.append('OpenSpec validation failed:\n' + (result.stderr.strip() or result.stdout.strip()))

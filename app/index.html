@@ -113,6 +113,8 @@
     .item-top { display:flex; gap:10px; align-items:flex-start; justify-content:space-between; }
     .item h4 { margin:4px 0 8px; font-size:15px; }
     .item p { margin:0; color:var(--muted); font-size:13px; line-height:1.45; }
+    .item-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .empty { border:1px dashed var(--border2); border-radius:18px; padding:18px; color:var(--muted); text-align:center; background:rgba(255,255,255,.025); }
     .pill-row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
     .pill { border:1px solid var(--border); border-radius:999px; padding:3px 8px; font-size:11px; color:var(--muted); background:rgba(255,255,255,.035); }
     .pill.good { color:var(--good); border-color:color-mix(in srgb,var(--good) 35%,transparent); background:color-mix(in srgb,var(--good) 10%,transparent); }
@@ -183,7 +185,7 @@
     <main>
       <div class="topbar">
         <div class="title"><h2 id="view-title">Ideas</h2><p id="view-desc">Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.</p></div>
-        <div class="actions"><button class="btn">Search ⌘K</button><button class="btn">New item</button><button class="btn primary">Approve selected</button></div>
+        <div class="actions"><button class="btn" id="reset-demo">Reset demo</button><button class="btn" id="new-idea">New idea</button><button class="btn primary" id="review-approvals">Review approvals</button></div>
       </div>
 
       <section id="view-inbox" class="view hidden">
@@ -220,14 +222,45 @@
   </div>
 
 <script>
-const items = [
-  {t:'approval_needed', p:'urgent', title:'Publish Telegram Daily Review?', body:'Generated from local incremental Telegram index. Required sections present; needs Вадим approval before public send/pin.', kind:'Digest', status:'in_review'},
-  {t:'alert', p:'high', title:'BentoBoard → Clever Cockpit prototype', body:'User liked BentoBoard UX. This item tracks the prototype and design decisions.', kind:'Prototype', status:'proposed'},
-  {t:'task_complete', p:'normal', title:'openclaw-tools sync clean', body:'Latest tooling changes pushed to GitHub; dirty reminder is active with quiet window and cooldown.', kind:'Tools', status:'done'},
-  {t:'idea_proposed', p:'high', title:'Add digest quality gate', body:'Check source count, stale index, required sections, local path leaks, HTTP 200 before publish/send.', kind:'Quality', status:'proposed'},
-  {t:'vip_email', p:'normal', title:'Anthropic May 6 watchlist', body:'Potential platform primitives: MCP API, code execution, Files API, web search API, extended thinking with tools.', kind:'Research', status:'proposed'},
-  {t:'alert', p:'normal', title:'SourceCraft pages were overwritten with light template', body:'Two latest review pages now use reusable markdown-digest-to-html.py light document template.', kind:'Publish', status:'done'}
-];
+const STORAGE_KEY = 'clever-cockpit:v2';
+const $ = (sel, root=document) => root.querySelector(sel);
+const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+const seedState = () => ({
+  theme: 'dark',
+  activity: [
+    { title: 'Clever Cockpit prototype updated', kind: 'Prototype', status: 'done', priority: 'normal', body: 'Ideas/projects/tasks are now the center of the cockpit.' },
+    { title: 'openclaw-tools sync clean', kind: 'Tools', status: 'done', priority: 'normal', body: 'Latest tooling changes pushed to GitHub; dirty reminder is active.' }
+  ],
+  approvals: [
+    { id: 'publish-page', title: 'Publish new external page', kind: 'external_action', priority: 'urgent', body: 'Public SourceCraft page requires explicit approval unless already requested.' },
+    { id: 'send-pin', title: 'Send/pin digest to Telegram', kind: 'messaging', priority: 'high', body: 'Allowed only after successful generation, publication, and verification.' }
+  ],
+  ideas: [
+    { id: 'cockpit-memory', title: 'Clever Cockpit as idea/task memory', status: 'review', body: 'Decision needed: build local MVP so good ideas from chat become tracked projects/tasks. Next: define datastore.' },
+    { id: 'telegram-idea-command', title: 'Telegram command: /idea', status: 'proposed', body: 'Capture current message/thread into Ideas with source link, tags, and suggested next action.' },
+    { id: 'auto-convert', title: 'Auto-convert approved idea to project', status: 'approved', body: 'When Вадим clicks OK: create project card + first 2-3 tasks + review date.' },
+    { id: 'digest-gate', title: 'Digest quality gate', status: 'approved', body: 'Before publish: required sections, source count, stale index, local path leak, HTTP 200.' },
+    { id: 'oauth-audit', title: 'OAuth/app permission audit', status: 'done', body: 'Periodic checklist for GitHub/Cursor/Claude/Codex access hygiene.' },
+    { id: 'anthropic-watch', title: 'Anthropic May 6 impact review', status: 'proposed', body: 'Schedule post-event review and extract changes relevant to OpenClaw harness.' },
+    { id: 'artifact-compare', title: 'Better artifact comparison', status: 'review', body: 'Side-by-side old/new digest view with source diff and publish/send buttons.' },
+    { id: 'park-supabase', title: 'Parked: full Supabase cockpit', status: 'done', body: 'Parked for now: too heavy until local prototype proves useful.' }
+  ],
+  projects: [
+    { id: 'clever-cockpit', title: 'Clever Cockpit', status: 'active', body: 'Goal: stop losing ideas/tasks in chat; source: BentoBoard-inspired prototype' },
+    { id: 'daily-reviews', title: 'Daily Reviews Pipeline', status: 'active', body: 'AI wrap-up + Telegram review + quality gates + SourceCraft publish' },
+    { id: 'tooling-sync', title: 'Tooling Sync Discipline', status: 'maintenance', body: 'Dirty reminder, auto-discovery, GitHub push hygiene' },
+    { id: 'personal-ops', title: 'OpenClaw Personal Ops', status: 'planning', body: 'Memory, reflection loop, health checks, calendar/inbox later' }
+  ],
+  tasks: [
+    { id: 'schema', title: 'Define idea lifecycle schema', project: 'Clever Cockpit', status: 'open', body: 'idea → decision → project/task → done/parked' },
+    { id: 'ok-deny', title: 'Add OK/Deny actions to approval cards', project: 'Clever Cockpit', status: 'done', body: 'Prototype interaction + future backend API' },
+    { id: 'local-store', title: 'Create local JSON/SQLite store proposal', project: 'Clever Cockpit', status: 'open', body: 'No Supabase until value is proven' },
+    { id: 'telegram-capture', title: 'Add /idea capture path from Telegram', project: 'Clever Cockpit', status: 'waiting', body: 'Needs command/message routing design' },
+    { id: 'digest-gates', title: 'Make digest gates reusable', project: 'Daily Reviews Pipeline', status: 'open', body: 'One script for AI + Telegram reviews' }
+  ]
+});
+
 const artifacts = [
   ['AI / Agentic Dev wrap-up v2','SourceCraft page','published','HTTP 200, light template, sources present'],
   ['Telegram Daily Review 2026-05-02','SourceCraft page','published','MyBookmarks + focused searches + For Clever section'],
@@ -240,34 +273,6 @@ const runs = [
   ['Tools dirty reminder','*/15 min','quiet','only notifies after real projected diff'],
   ['Telegram index sync','05:00 MSK','scheduled','incremental user-search backfill']
 ];
-const approvals = [
-  ['Publish new external page','external_action','Needs explicit approval if public and not already requested'],
-  ['Send/pin digest to Telegram','messaging','Allowed only after successful generation/publish/verify'],
-  ['Run destructive shell command','danger','Ask first; prefer trash over rm']
-];
-const ideas = [
-  ['Clever Cockpit as idea/task memory','review','Decision needed: build local MVP so good ideas from chat become tracked projects/tasks. Next: define datastore.'],
-  ['Telegram command: /idea','proposed','Capture current message/thread into Ideas with source link, tags, and suggested next action.'],
-  ['Auto-convert approved idea to project','approved','When Вадим clicks OK: create project card + first 2-3 tasks + review date.'],
-  ['Digest quality gate','approved','Before publish: required sections, source count, stale index, local path leak, HTTP 200.'],
-  ['OAuth/app permission audit','done','Periodic checklist for GitHub/Cursor/Claude/Codex access hygiene.'],
-  ['Anthropic May 6 impact review','proposed','Schedule post-event review and extract changes relevant to OpenClaw harness.'],
-  ['Better artifact comparison','review','Side-by-side old/new digest view with source diff and publish/send buttons.'],
-  ['Parked: full Supabase cockpit','done','Parked for now: too heavy until local prototype proves useful.']
-];
-const projects = [
-  ['Clever Cockpit','active','Goal: stop losing ideas/tasks in chat; source: BentoBoard-inspired prototype'],
-  ['Daily Reviews Pipeline','active','AI wrap-up + Telegram review + quality gates + SourceCraft publish'],
-  ['Tooling Sync Discipline','maintenance','Dirty reminder, auto-discovery, GitHub push hygiene'],
-  ['OpenClaw Personal Ops','planning','Memory, reflection loop, health checks, calendar/inbox later']
-];
-const tasks = [
-  ['Define idea lifecycle schema','Clever Cockpit','open','idea → decision → project/task → done/parked'],
-  ['Add OK/Deny actions to approval cards','Clever Cockpit','done','Prototype interaction + future backend API'],
-  ['Create local JSON/SQLite store proposal','Clever Cockpit','open','No Supabase until value is proven'],
-  ['Add /idea capture path from Telegram','Clever Cockpit','waiting','Needs command/message routing design'],
-  ['Make digest gates reusable','Daily Reviews Pipeline','open','One script for AI + Telegram reviews']
-];
 const health = [
   ['Telegram index freshness','good','Recent 24h has 1400 lines; bookmarks 76 lines'],
   ['openclaw-tools sync','good','safe projection clean; new skills auto-discovered'],
@@ -275,21 +280,195 @@ const health = [
   ['Digest template','good','Light document template; no local path leaks'],
   ['BentoBoard upstream','warn','Prototype only: weak docs, permissive RLS, no backend']
 ];
-function pill(text, cls='') { return `<span class="pill ${cls}">${text}</span>` }
-function itemCard(x,i){ const cls=x.p==='urgent'?'bad':x.p==='high'?'warn':'blue'; return `<div class="item" data-i="${i}"><div class="item-top"><div><div class="pill-row">${pill(x.kind,'blue')} ${pill(x.status,x.status==='done'?'good':x.status==='in_review'?'warn':'')}</div><h4>${x.title}</h4><p>${x.body}</p></div>${pill(x.p,cls)}</div></div>` }
-function renderDetail(x=items[0]){ document.getElementById('detail').innerHTML = `<h3>${x.title}</h3><p>${x.body}</p><div class="kv"><div>Type</div><div>${x.t}</div><div>Status</div><div>${pill(x.status,x.status==='done'?'good':x.status==='in_review'?'warn':'')}</div><div>Priority</div><div>${pill(x.p,x.p==='urgent'?'bad':x.p==='high'?'warn':'blue')}</div><div>Actions</div><div><button class="btn primary">OK</button> <button class="btn">Deny</button> <button class="btn">Comment</button></div></div><p style="color:var(--muted)">Future version: show source evidence, run logs, diff, and exact command/message before approval.</p>`; }
-function simpleList(id, rows, type){ document.getElementById(id).innerHTML = rows.map((r,idx)=>`<div class="item"><div class="item-top"><div><div class="pill-row">${pill(r[1]||type,'blue')} ${pill(r[2]||'', r[2]==='published'||r[2]==='success'||r[2]==='done'?'good':r[2]==='quiet'||r[2]==='scheduled'||r[2]==='in_review'?'warn':'')}</div><h4>${r[0]}</h4><p>${r[3]||''}</p></div></div></div>`).join(''); }
-function init(){
-  document.getElementById('item-list').innerHTML = items.map(itemCard).join(''); renderDetail();
-  document.querySelectorAll('#item-list .item').forEach(el=>el.onclick=()=>renderDetail(items[+el.dataset.i]));
-  simpleList('artifact-list', artifacts, 'artifact'); simpleList('run-list', runs, 'run'); simpleList('approval-list', approvals, 'approval'); document.querySelectorAll('#approval-list .item').forEach(el=>el.insertAdjacentHTML('beforeend','<div style="margin-top:10px"><button class="btn primary">OK</button> <button class="btn">Deny</button> <button class="btn">Details</button></div>')); simpleList('health-list', health, 'health');
-  ideas.forEach(([title,status,body])=>{ const id=status==='proposed'?'ideas-proposed':status==='review'?'ideas-review':status==='approved'?'ideas-approved':'ideas-done'; const actions=status==='review'||status==='proposed'?'<div style="margin-top:10px"><button class="btn primary">OK</button> <button class="btn">Deny</button> <button class="btn">Make task</button></div>':'<div style="margin-top:10px">'+pill(status==='approved'?'converted to project':'closed','good')+'</div>'; document.getElementById(id).innerHTML += `<div class="item"><h4>${title}</h4><p>${body}</p>${actions}</div>`; });
-simpleList('project-list', projects, 'project'); simpleList('task-list', tasks, 'task');
+
+let state = loadState();
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return seedState();
+    const parsed = JSON.parse(raw);
+    return parsed && parsed.ideas && parsed.approvals ? parsed : seedState();
+  } catch { return seedState(); }
 }
-const titles={ideas:['Ideas','Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.'],projects:['Projects','Approved ideas grouped into outcomes with owners, next tasks, and review dates.'],tasks:['Tasks','Concrete next actions created from ideas, projects, digests, and operational work.'],inbox:['Inbox','Attention feed: approvals, failures, useful finds, and reminders.'],approvals:['Approvals','Human-in-the-loop queue with OK/Deny buttons for external, destructive, expensive, or sensitive actions.'],artifacts:['Artifacts','Digest drafts, SourceCraft pages, generated reports, scripts, and compareable outputs.'],runs:['Runs','Cron jobs, subagents, background commands, last success and logs.'],health:['Health','Freshness checks, sync state, publish checks, and operational risks.']};
-document.querySelectorAll('.nav-btn').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); const v=btn.dataset.view; document.querySelectorAll('.view').forEach(x=>x.classList.add('hidden')); document.getElementById('view-'+v).classList.remove('hidden'); document.getElementById('view-title').textContent=titles[v][0]; document.getElementById('view-desc').textContent=titles[v][1];});
-document.querySelectorAll('[data-theme-btn]').forEach(btn=>btn.onclick=()=>document.documentElement.dataset.theme=btn.dataset.themeBtn);
-init();
+function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function resetDemo() { state = seedState(); saveState(); renderAll(); }
+function escapeHtml(s='') { return String(s).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+function pill(text, cls='') { return `<span class="pill ${cls}">${escapeHtml(text)}</span>`; }
+function statusClass(status) { return status === 'done' || status === 'approved' || status === 'published' || status === 'success' || status === 'active' ? 'good' : status === 'review' || status === 'in_review' || status === 'waiting' || status === 'scheduled' || status === 'maintenance' || status === 'planning' ? 'warn' : status === 'urgent' || status === 'danger' ? 'bad' : 'blue'; }
+function priorityClass(priority) { return priority === 'urgent' || priority === 'danger' ? 'bad' : priority === 'high' ? 'warn' : 'blue'; }
+function activity(title, body, kind='Activity', status='done', priority='normal') {
+  state.activity.unshift({ title, body, kind, status, priority });
+  state.activity = state.activity.slice(0, 20);
+}
+function slugify(s) { return s.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-|-$/g, '').slice(0, 48) || `item-${Date.now()}`; }
+
+function renderCounts() {
+  const pending = state.approvals.length;
+  const ideas = state.ideas.length;
+  const tasks = state.tasks.length;
+  const projects = state.projects.length;
+  const needDecision = state.ideas.filter(i => ['proposed','review'].includes(i.status)).length;
+  const converted = state.ideas.filter(i => i.status === 'approved').length;
+  const parked = state.ideas.filter(i => i.status === 'done').length;
+
+  setBadge('approvals', pending, true);
+  setBadge('ideas', ideas);
+  setBadge('projects', projects);
+  setBadge('tasks', tasks);
+  setBadge('inbox', state.activity.length);
+
+  const navApproval = $('[data-view="approvals"]');
+  navApproval.classList.toggle('urgent-nav', pending > 0);
+  const alert = $('#view-ideas .approval-alert');
+  if (alert) {
+    alert.classList.toggle('hidden', pending === 0);
+    alert.querySelector('h3').innerHTML = `<span class="pulse"></span>${pending} approvals need decision`;
+  }
+  const approvalTitle = $('#view-approvals h3');
+  if (approvalTitle) approvalTitle.innerHTML = pending > 0 ? `<span class="pulse"></span>Approvals need decision` : 'No pending approvals';
+
+  const stats = $$('#view-ideas .stat b');
+  if (stats.length >= 4) {
+    stats[0].textContent = ideas;
+    stats[1].textContent = needDecision;
+    stats[2].textContent = converted;
+    stats[3].textContent = parked;
+  }
+  const inboxStats = $$('#view-inbox .stat b');
+  if (inboxStats.length >= 4) {
+    inboxStats[0].textContent = state.activity.length;
+    inboxStats[2].textContent = pending;
+  }
+}
+function setBadge(view, count, hot=false) {
+  const btn = $(`[data-view="${view}"]`);
+  if (!btn) return;
+  let badge = btn.querySelector('.badge');
+  if (!badge) { badge = document.createElement('span'); badge.className='badge'; btn.appendChild(badge); }
+  badge.textContent = count;
+  badge.classList.toggle('hot', hot && count > 0);
+  badge.classList.toggle('hidden', count === 0 && view !== 'approvals');
+}
+
+function itemCard(x, idx) {
+  return `<div class="item" data-activity="${idx}"><div class="item-top"><div><div class="pill-row">${pill(x.kind,'blue')} ${pill(x.status,statusClass(x.status))}</div><h4>${escapeHtml(x.title)}</h4><p>${escapeHtml(x.body)}</p></div>${pill(x.priority || 'normal', priorityClass(x.priority))}</div></div>`;
+}
+function renderDetail(x=state.activity[0]) {
+  if (!x) { $('#detail').innerHTML = '<div class="empty">No activity yet</div>'; return; }
+  $('#detail').innerHTML = `<h3>${escapeHtml(x.title)}</h3><p>${escapeHtml(x.body)}</p><div class="kv"><div>Type</div><div>${escapeHtml(x.kind || x.t || 'activity')}</div><div>Status</div><div>${pill(x.status || 'new', statusClass(x.status))}</div><div>Priority</div><div>${pill(x.priority || 'normal', priorityClass(x.priority))}</div></div><p style="color:var(--muted)">Future version: show source evidence, run logs, diff, and exact command/message before approval.</p>`;
+}
+function renderActivity() {
+  $('#item-list').innerHTML = state.activity.length ? state.activity.map(itemCard).join('') : '<div class="empty">All caught up</div>';
+  $$('#item-list .item').forEach(el => el.onclick = () => renderDetail(state.activity[+el.dataset.activity]));
+  renderDetail(state.activity[0]);
+}
+function simpleList(id, rows, type) {
+  const el = document.getElementById(id);
+  el.innerHTML = rows.length ? rows.map(r => `<div class="item"><div class="item-top"><div><div class="pill-row">${pill(r[1] || type,'blue')} ${pill(r[2] || '', statusClass(r[2]))}</div><h4>${escapeHtml(r[0])}</h4><p>${escapeHtml(r[3] || '')}</p></div></div></div>`).join('') : '<div class="empty">Nothing here yet</div>';
+}
+function renderApprovals() {
+  const root = $('#approval-list');
+  root.innerHTML = state.approvals.length ? state.approvals.map(a => `<div class="item" data-approval="${a.id}"><div class="item-top"><div><div class="pill-row">${pill(a.kind,'blue')} ${pill(a.priority,priorityClass(a.priority))}</div><h4>${escapeHtml(a.title)}</h4><p>${escapeHtml(a.body)}</p></div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${a.id}">OK</button><button class="btn" data-action="deny" data-id="${a.id}">Deny</button><button class="btn" data-action="details" data-id="${a.id}">Details</button></div></div>`).join('') : '<div class="empty">No approvals pending. Ideas can flow normally.</div>';
+}
+function renderIdeas() {
+  const lanes = { proposed: $('#ideas-proposed'), review: $('#ideas-review'), approved: $('#ideas-approved'), done: $('#ideas-done') };
+  Object.values(lanes).forEach(el => el.innerHTML = '');
+  state.ideas.forEach(idea => {
+    const lane = lanes[idea.status] || lanes.done;
+    const needsAction = ['proposed','review'].includes(idea.status);
+    const converted = idea.status === 'approved';
+    const actions = needsAction
+      ? `<div class="item-actions"><button class="btn primary" data-action="idea-ok" data-id="${idea.id}">OK</button><button class="btn" data-action="idea-deny" data-id="${idea.id}">Deny</button><button class="btn" data-action="idea-task" data-id="${idea.id}">Make task</button></div>`
+      : `<div class="item-actions">${pill(converted ? 'converted to project/task' : 'closed', converted ? 'good' : 'warn')}</div>`;
+    lane.insertAdjacentHTML('beforeend', `<div class="item" data-idea="${idea.id}"><h4>${escapeHtml(idea.title)}</h4><p>${escapeHtml(idea.body)}</p>${actions}</div>`);
+  });
+  Object.values(lanes).forEach(el => { if (!el.innerHTML.trim()) el.innerHTML = '<div class="empty">Empty</div>'; });
+}
+function renderProjects() {
+  simpleList('project-list', state.projects.map(p => [p.title, p.status, p.status, p.body]), 'project');
+}
+function renderTasks() {
+  simpleList('task-list', state.tasks.map(t => [t.title, t.project, t.status, t.body]), 'task');
+}
+function renderStaticLists() {
+  simpleList('artifact-list', artifacts, 'artifact');
+  simpleList('run-list', runs, 'run');
+  simpleList('health-list', health, 'health');
+}
+function renderAll() {
+  document.documentElement.dataset.theme = state.theme || 'dark';
+  renderCounts(); renderActivity(); renderApprovals(); renderIdeas(); renderProjects(); renderTasks(); renderStaticLists();
+  saveState();
+}
+
+function decideApproval(id, decision) {
+  const approval = state.approvals.find(a => a.id === id);
+  if (!approval) return;
+  state.approvals = state.approvals.filter(a => a.id !== id);
+  activity(`${decision === 'ok' ? 'Approved' : 'Denied'}: ${approval.title}`, approval.body, 'Approval', decision === 'ok' ? 'approved' : 'rejected', approval.priority);
+  renderAll();
+}
+function convertIdea(id, mode) {
+  const idea = state.ideas.find(i => i.id === id);
+  if (!idea) return;
+  if (mode === 'deny') {
+    idea.status = 'done';
+    idea.body += ' · Parked with reason: not now / not worth current focus.';
+    activity(`Parked idea: ${idea.title}`, idea.body, 'Idea', 'done', 'normal');
+  } else {
+    idea.status = 'approved';
+    const projectId = slugify(idea.title);
+    if (!state.projects.some(p => p.id === projectId)) {
+      state.projects.unshift({ id: projectId, title: idea.title, status: 'planning', body: `Created from approved idea. Outcome and owner need confirmation.` });
+    }
+    const taskId = `${projectId}-next`;
+    if (!state.tasks.some(t => t.id === taskId)) {
+      state.tasks.unshift({ id: taskId, title: mode === 'task' ? `Implement: ${idea.title}` : `Define next step: ${idea.title}`, project: idea.title, status: 'open', body: mode === 'task' ? 'Created via Make task from idea.' : 'Created automatically after idea approval.' });
+    }
+    activity(`Converted idea: ${idea.title}`, 'Created project/task follow-up from approved idea.', 'Idea', 'approved', 'high');
+  }
+  renderAll();
+}
+function captureIdea() {
+  const title = prompt('Idea title?');
+  if (!title) return;
+  const body = prompt('Why does this matter / next hint?', 'Captured manually from chat or thought.') || 'Captured manually.';
+  const id = `${slugify(title)}-${Date.now().toString(36)}`;
+  state.ideas.unshift({ id, title, body, status: 'proposed' });
+  activity(`Captured idea: ${title}`, body, 'Idea', 'proposed', 'normal');
+  showView('ideas');
+  renderAll();
+}
+function showView(v) {
+  $$('.nav-btn').forEach(b => b.classList.remove('active'));
+  const btn = $(`[data-view="${v}"]`);
+  if (btn) btn.classList.add('active');
+  $$('.view').forEach(x => x.classList.add('hidden'));
+  $(`#view-${v}`)?.classList.remove('hidden');
+  $('#view-title').textContent = titles[v][0];
+  $('#view-desc').textContent = titles[v][1];
+}
+
+const titles = {ideas:['Ideas','Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.'],projects:['Projects','Approved ideas grouped into outcomes with owners, next tasks, and review dates.'],tasks:['Tasks','Concrete next actions created from ideas, projects, digests, and operational work.'],inbox:['Inbox','Attention feed: approvals, failures, useful finds, and reminders.'],approvals:['Approvals','Human-in-the-loop queue with OK/Deny buttons for external, destructive, expensive, or sensitive actions.'],artifacts:['Artifacts','Digest drafts, SourceCraft pages, generated reports, scripts, and compareable outputs.'],runs:['Runs','Cron jobs, subagents, background commands, last success and logs.'],health:['Health','Freshness checks, sync state, publish checks, and operational risks.']};
+
+$$('.nav-btn').forEach(btn => btn.onclick = () => showView(btn.dataset.view));
+$$('[data-theme-btn]').forEach(btn => btn.onclick = () => { state.theme = btn.dataset.themeBtn; renderAll(); });
+$('#reset-demo').onclick = () => { if (confirm('Reset demo data?')) resetDemo(); };
+$('#new-idea').onclick = captureIdea;
+$('#review-approvals').onclick = () => showView('approvals');
+$('#view-ideas .approval-alert button').onclick = () => showView('approvals');
+document.addEventListener('click', (event) => {
+  const btn = event.target.closest('[data-action]');
+  if (!btn) return;
+  const { action, id } = btn.dataset;
+  if (action === 'approve') decideApproval(id, 'ok');
+  if (action === 'deny') decideApproval(id, 'deny');
+  if (action === 'details') alert(state.approvals.find(a => a.id === id)?.body || 'No details');
+  if (action === 'idea-ok') convertIdea(id, 'ok');
+  if (action === 'idea-deny') convertIdea(id, 'deny');
+  if (action === 'idea-task') convertIdea(id, 'task');
+});
+renderAll();
 </script>
 </body>
 </html>
