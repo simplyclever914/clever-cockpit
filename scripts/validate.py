@@ -23,6 +23,8 @@ REQUIRED_MARKERS = [
     'Idea → Project → Task lifecycle',
     'Approved idea → draft project',
     'Task = next action',
+    'Schedules run by default',
+    'Normal schedules run directly',
     'Captured ideas',
     'Converted to tasks',
     'STORAGE_KEY',
@@ -68,6 +70,12 @@ CREATE_APPROVAL_MARKERS = [
     'telegram_send_and_pin_digest',
     'approval_created',
 ]
+CREATE_IDEA_MARKERS = [
+    '/api/ideas',
+    '--approval',
+    'idea_created',
+    'approval_created',
+]
 FORBIDDEN_MARKERS = [
     'data-view="architecture"',
     'SOURCECRAFT_TOKEN',
@@ -106,7 +114,11 @@ def main() -> int:
     for marker in CREATE_APPROVAL_MARKERS:
         if marker not in create_approval_text:
             errors.append(f'missing create approval marker: {marker}')
-    py_compile = subprocess.run([sys.executable, '-m', 'py_compile', str(ROOT / 'server' / 'cockpit_server.py'), str(ROOT / 'scripts' / 'approval_runner.py'), str(ROOT / 'scripts' / 'create-cockpit-approval.py')], cwd=ROOT, text=True, capture_output=True)
+    create_idea_text = (ROOT / 'scripts' / 'create-cockpit-idea.py').read_text(encoding='utf-8')
+    for marker in CREATE_IDEA_MARKERS:
+        if marker not in create_idea_text:
+            errors.append(f'missing create idea marker: {marker}')
+    py_compile = subprocess.run([sys.executable, '-m', 'py_compile', str(ROOT / 'server' / 'cockpit_server.py'), str(ROOT / 'scripts' / 'approval_runner.py'), str(ROOT / 'scripts' / 'create-cockpit-approval.py'), str(ROOT / 'scripts' / 'create-cockpit-idea.py')], cwd=ROOT, text=True, capture_output=True)
     if py_compile.returncode != 0:
         errors.append('server py_compile failed:\n' + (py_compile.stderr.strip() or py_compile.stdout.strip()))
 

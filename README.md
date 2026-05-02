@@ -55,7 +55,17 @@ scripts/create-cockpit-approval.py \
   --text-file /tmp/digest.txt
 ```
 
-For a generated AI wrap-up, use `digest_publish_and_send` so SourceCraft publish and Telegram send/pin happen together after one OK.
+Important: schedules execute their normal work directly by default. Use typed approvals only for explicit gates or separate idea decisions.
+
+Schedules that discover follow-up ideas can record them without blocking delivery:
+
+```bash
+scripts/create-cockpit-idea.py \
+  --title "Evaluate new source" \
+  --body "Found during Telegram Review" \
+  --source schedule \
+  --approval
+```
 
 
 ## Validate

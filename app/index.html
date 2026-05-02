@@ -250,7 +250,7 @@
             <div class="wf-node decision" style="left:298px;top:76px"><b>2. Decision gate</b><small>Clarify value, risk, owner, next step. Outcome: park, make task, or create draft project.</small></div>
             <div class="wf-node project" style="left:548px;top:76px"><b>3. Draft project</b><small>Approved idea becomes a draft project with outcome + first task. Not active until confirmed.</small></div>
             <div class="wf-node task" style="left:548px;top:318px"><b>4. Tasks</b><small>Concrete next actions. Tasks can come from a project or directly from a small approved idea.</small></div>
-            <div class="wf-node approval" style="left:92px;top:238px"><b>Approval checkpoint</b><small>External, sensitive, costly, or public actions pause here for OK/Deny.</small></div>
+            <div class="wf-node approval" style="left:92px;top:238px"><b>Approval checkpoint</b><small>Only explicit gates or new idea decisions pause here. Normal schedules run directly.</small></div>
             <div class="wf-node feedback" style="left:235px;top:410px"><b>5. Run/result</b><small>Work produces activity, artifacts, learnings, blocked states, or follow-up ideas.</small></div>
             <div class="wf-node idea" style="left:365px;top:506px"><b>Feedback loop</b><small>Results can spawn new ideas, update the project, or close tasks. Nothing should disappear in chat.</small></div>
           </div>
@@ -261,7 +261,8 @@
                 <div class="item"><h4>Idea ≠ commitment</h4><p>Идея — это captured signal. Она ждёт решения: развивать, превратить в маленькую задачу, отложить или закрыть.</p></div>
                 <div class="item"><h4>Approved idea → draft project</h4><p>OK по идее создаёт draft project + first task. Активным проект становится только после подтверждения outcome/приоритета.</p></div>
                 <div class="item"><h4>Task = next action</h4><p>Задача должна быть исполнимой: один понятный шаг, статус, привязка к проекту или source idea.</p></div>
-                <div class="item"><h4>Approvals are execution gates</h4><p>OK/Deny в Approvals не “просто заметка”: runner забирает approved action и выполняет только allowlisted handler.</p></div>
+                <div class="item"><h4>Schedules run by default</h4><p>Расписания делают свою работу без approval, если Вадим явно не поставил gate. Approval нужен для отдельных решений/новых идей.</p></div>
+                <div class="item"><h4>Approvals are explicit gates</h4><p>OK/Deny в Approvals не “просто заметка”: runner забирает approved action и выполняет только allowlisted handler.</p></div>
                 <div class="item"><h4>Activity closes the loop</h4><p>Каждый запуск, публикация, ошибка или результат попадает в activity и может породить новую идею/таск.</p></div>
               </div>
             </div>
