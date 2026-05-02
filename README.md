@@ -6,12 +6,13 @@ This repository is intentionally SDD-first using vanilla Fission-AI/OpenSpec: pr
 
 ## Current MVP
 
-- Static dependency-free prototype in `app/index.html`.
-- LocalStorage-backed interactions:
+- Static dependency-free cockpit UI in `app/index.html`.
+- SQLite-backed local service in `server/cockpit_server.py` with LocalStorage fallback for static previews.
+- Interactions:
   - approvals can be `OK`/`Deny`/`Details`;
   - ideas can be approved, denied/parked, or converted into tasks;
   - approved ideas become project/task material rather than dead chat notes.
-- Vanilla OpenSpec `spec-driven` change in `openspec/changes/initial-cockpit/`.
+- Vanilla OpenSpec `spec-driven` specs are archived into `openspec/specs/` with completed changes under `openspec/changes/archive/`.
 
 
 ## Run as local/LAN app
