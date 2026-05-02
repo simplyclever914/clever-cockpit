@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Clever Cockpit Prototype</title>
+  <link rel="icon" href="data:," />
   <style>
     :root {
       color-scheme: dark;
@@ -444,9 +445,13 @@ function renderDetail(x=state.activity[0]) {
 }
 function renderActivity() {
   const html = state.activity.length ? state.activity.map(itemCard).join('') : '<div class="empty">All caught up</div>';
-  $('#item-list').innerHTML = html;
-  $$('#item-list .item').forEach(el => el.onclick = () => renderDetail(state.activity[+el.dataset.activity]));
-  renderDetail(state.activity[0]);
+  const legacyList = $('#item-list');
+  const legacyDetail = $('#detail');
+  if (legacyList) {
+    legacyList.innerHTML = html;
+    $$('#item-list .item').forEach(el => el.onclick = () => renderDetail(state.activity[+el.dataset.activity]));
+    if (legacyDetail) renderDetail(state.activity[0]);
+  }
   const activityList = $('#activity-list');
   if (activityList) {
     activityList.innerHTML = html;
