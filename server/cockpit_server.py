@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import secrets
 import sqlite3
 import sys
@@ -45,6 +46,10 @@ create table if not exists approvals (
   priority text not null default 'normal',
   body text not null default '',
   status text not null default 'pending',
+  run_status text,
+  claimed_at text,
+  completed_at text,
+  last_error text,
   created_at text not null,
   updated_at text not null
 );
@@ -120,7 +125,22 @@ def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    migrate(conn)
     return conn
+
+
+def migrate(conn: sqlite3.Connection) -> None:
+    columns = {row[1] for row in conn.execute("pragma table_info(approvals)")}
+    migrations = {
+        "run_status": "alter table approvals add column run_status text",
+        "claimed_at": "alter table approvals add column claimed_at text",
+        "completed_at": "alter table approvals add column completed_at text",
+        "last_error": "alter table approvals add column last_error text",
+    }
+    for column, sql in migrations.items():
+        if column not in columns:
+            conn.execute(sql)
+    conn.commit()
 
 
 def seed(conn: sqlite3.Connection, force: bool = False) -> None:
@@ -129,7 +149,7 @@ def seed(conn: sqlite3.Connection, force: bool = False) -> None:
     if conn.execute("select count(*) from ideas").fetchone()[0]:
         return
     t = now()
-    conn.executemany("insert or ignore into approvals values (?,?,?,?,?,?,?,?)", [(a,b,c,d,e,"pending",t,t) for a,b,c,d,e in SEED["approvals"]])
+    conn.executemany("insert or ignore into approvals(id,title,kind,priority,body,status,created_at,updated_at) values (?,?,?,?,?,?,?,?)", [(a,b,c,d,e,"pending",t,t) for a,b,c,d,e in SEED["approvals"]])
     conn.executemany("insert or ignore into ideas values (?,?,?,?,?,?,?)", [(a,b,c,d,e,t,t) for a,b,c,d,e in SEED["ideas"]])
     conn.executemany("insert or ignore into projects values (?,?,?,?,?,?,?)", [(a,b,c,d,e,t,t) for a,b,c,d,e in SEED["projects"]])
     conn.executemany("insert or ignore into tasks values (?,?,?,?,?,?,?,?)", [(a,b,c,d,e,f,t,t) for a,b,c,d,e,f in SEED["tasks"]])
@@ -156,6 +176,47 @@ def state(conn: sqlite3.Connection) -> dict:
         "tasks": rows(conn, "tasks"),
         "activity": rows(conn, "activity")[:50],
     }
+
+
+def ready_approvals(conn: sqlite3.Connection, limit: int = 10) -> list[dict]:
+    t = now()
+    rows_to_claim = conn.execute(
+        """
+        select * from approvals
+        where status='accepted' and (run_status is null or run_status in ('queued','needs_retry'))
+        order by updated_at asc
+        limit ?
+        """,
+        (limit,),
+    ).fetchall()
+    claimed: list[dict] = []
+    for row in rows_to_claim:
+        conn.execute(
+            "update approvals set run_status='running', claimed_at=?, updated_at=? where id=? and (run_status is null or run_status in ('queued','needs_retry'))",
+            (t, t, row["id"]),
+        )
+        add_activity(conn, f"Approval claimed: {row['title']}", row["body"], "ApprovalRunner", "running", row["priority"])
+        claimed.append(dict(row) | {"run_status": "running", "claimed_at": t, "updated_at": t})
+    conn.commit()
+    return claimed
+
+
+def complete_approval(conn: sqlite3.Connection, approval_id: str, run_status: str, message: str = "") -> dict | None:
+    allowed = {"done", "failed", "needs_handler", "needs_retry"}
+    if run_status not in allowed:
+        raise ValueError(f"invalid run_status: {run_status}")
+    row = conn.execute("select * from approvals where id=?", (approval_id,)).fetchone()
+    if not row:
+        return None
+    t = now()
+    conn.execute(
+        "update approvals set run_status=?, completed_at=?, last_error=?, updated_at=? where id=?",
+        (run_status, t, message if run_status in {"failed", "needs_handler", "needs_retry"} else None, t, approval_id),
+    )
+    add_activity(conn, f"Approval run {run_status}: {row['title']}", message, "ApprovalRunner", run_status, row["priority"])
+    conn.commit()
+    updated = conn.execute("select * from approvals where id=?", (approval_id,)).fetchone()
+    return dict(updated) if updated else None
 
 
 def ensure_token() -> str:
@@ -185,6 +246,10 @@ class Handler(SimpleHTTPRequestHandler):
     def end_headers(self) -> None:
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
+
+    def log_message(self, format: str, *args: object) -> None:
+        safe_args = tuple(redact_token(str(arg)) for arg in args)
+        super().log_message(format, *safe_args)
 
     def auth_ok(self) -> bool:
         if not self.require_token:
@@ -219,6 +284,10 @@ class Handler(SimpleHTTPRequestHandler):
                 seed(conn)
                 if parsed.path == "/api/state":
                     self.send_json(state(conn))
+                elif parsed.path == "/api/approvals/ready":
+                    qs = parse_qs(parsed.query)
+                    limit = min(int(qs.get("limit", ["10"])[0]), 50)
+                    self.send_json({"approvals": ready_approvals(conn, limit)})
                 else:
                     self.send_json({"error": "not found"}, 404)
             return
@@ -244,9 +313,22 @@ class Handler(SimpleHTTPRequestHandler):
                     row = conn.execute("select * from approvals where id=?", (approval_id,)).fetchone()
                     if not row:
                         self.send_json({"error": "approval not found"}, 404); return
-                    conn.execute("update approvals set status=?, updated_at=? where id=?", (decision, now(), approval_id))
+                    run_status = "queued" if decision == "accepted" else None
+                    conn.execute(
+                        "update approvals set status=?, run_status=?, claimed_at=null, completed_at=null, last_error=null, updated_at=? where id=?",
+                        (decision, run_status, now(), approval_id),
+                    )
                     add_activity(conn, f"Approval {decision}: {row['title']}", row["body"], "Approval", decision, row["priority"])
                     conn.commit()
+                elif parsed.path == "/api/approvals/complete":
+                    approval_id = data["id"]
+                    run_status = data.get("run_status", "done")
+                    message = (data.get("message") or "").strip()
+                    updated = complete_approval(conn, approval_id, run_status, message)
+                    if not updated:
+                        self.send_json({"error": "approval not found"}, 404); return
+                    self.send_json({"approval": updated, "state": state(conn)})
+                    return
                 elif parsed.path == "/api/ideas":
                     title = (data.get("title") or "").strip()
                     if not title:
@@ -308,6 +390,12 @@ def main(argv: list[str] | None = None) -> int:
         print("Token check disabled for localhost/default mode." if args.no_token else "Localhost mode: API token not required.")
     httpd.serve_forever()
     return 0
+
+
+def redact_token(text: str) -> str:
+    text = re.sub(r"([?&]token=)[^\s&]+", r"\1***", text)
+    text = re.sub(r"(Bearer\s+)[A-Za-z0-9._~+\-/=]+", r"\1***", text)
+    return text
 
 
 if __name__ == "__main__":

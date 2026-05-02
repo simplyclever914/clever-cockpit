@@ -38,7 +38,17 @@ SERVER_MARKERS = [
     'sqlite3',
     'CLEVER_COCKPIT_TOKEN',
     '/api/state',
+    '/api/approvals/ready',
+    '/api/approvals/complete',
     '/api/ideas/transition',
+    'run_status',
+    'redact_token',
+]
+RUNNER_MARKERS = [
+    'handle_approval',
+    '/api/approvals/ready',
+    '/api/approvals/complete',
+    'needs_handler',
 ]
 FORBIDDEN_MARKERS = [
     'data-view="architecture"',
@@ -70,7 +80,11 @@ def main() -> int:
     for marker in SERVER_MARKERS:
         if marker not in server_text:
             errors.append(f'missing server marker: {marker}')
-    py_compile = subprocess.run([sys.executable, '-m', 'py_compile', str(ROOT / 'server' / 'cockpit_server.py')], cwd=ROOT, text=True, capture_output=True)
+    runner_text = (ROOT / 'scripts' / 'approval_runner.py').read_text(encoding='utf-8')
+    for marker in RUNNER_MARKERS:
+        if marker not in runner_text:
+            errors.append(f'missing runner marker: {marker}')
+    py_compile = subprocess.run([sys.executable, '-m', 'py_compile', str(ROOT / 'server' / 'cockpit_server.py'), str(ROOT / 'scripts' / 'approval_runner.py')], cwd=ROOT, text=True, capture_output=True)
     if py_compile.returncode != 0:
         errors.append('server py_compile failed:\n' + (py_compile.stderr.strip() or py_compile.stdout.strip()))
 
