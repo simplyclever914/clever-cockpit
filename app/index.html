@@ -122,6 +122,10 @@
     .pill.warn { color:var(--warn); border-color:color-mix(in srgb,var(--warn) 35%,transparent); background:color-mix(in srgb,var(--warn) 10%,transparent); }
     .pill.bad { color:var(--bad); border-color:color-mix(in srgb,var(--bad) 35%,transparent); background:color-mix(in srgb,var(--bad) 10%,transparent); }
     .pill.blue { color:var(--blue); border-color:color-mix(in srgb,var(--blue) 35%,transparent); background:color-mix(in srgb,var(--blue) 10%,transparent); }
+    .legend { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:flex-start; margin:8px 0 14px; padding:10px 12px; border:1px solid var(--border); border-radius:14px; background:rgba(255,255,255,.026); color:var(--muted); font-size:12px; line-height:1.35; }
+    .legend-title { color:var(--soft); text-transform:uppercase; letter-spacing:.12em; font-size:10px; margin-right:2px; padding-top:4px; }
+    .legend-item { display:inline-flex; gap:5px; align-items:center; }
+    .legend .pill { flex:0 0 auto; }
     .detail { position: sticky; top: 18px; }
     .preview { min-height: 420px; border-radius:18px; border:1px solid var(--border); background:var(--glass2); padding:18px; }
     .preview h3 { margin-top:0; }
@@ -210,6 +214,7 @@
           <div class="card panel">
             <div class="panel-head"><h3>Activity log</h3><div class="tabs"><button class="tab active">All</button><button class="tab">Approvals</button><button class="tab">Ideas</button><button class="tab">Runs</button></div></div>
             <p style="color:var(--muted);margin-top:0">Chronological log of runs, approvals, idea transitions, publications, errors, and follow-up outcomes.</p>
+            <div id="legend-activity"></div>
             <div id="activity-list"></div>
           </div>
           <div class="card panel detail"><div id="activity-detail" class="preview"></div></div>
@@ -217,26 +222,27 @@
       </section>
 
       <section id="view-artifacts" class="view hidden">
-        <div class="grid content-grid"><div class="card panel"><div class="panel-head"><h3>Artifacts</h3><button class="btn">Compare versions</button></div><div id="artifact-list"></div></div><div class="card panel detail"><div class="preview"><h3>Artifact preview</h3><p>Markdown/HTML digest preview, source list, publish URL, and verification checks would render here.</p><div class="kv"><div>Checks</div><div><span class="pill good">HTTP 200</span> <span class="pill good">no local paths</span> <span class="pill good">required sections</span></div><div>Actions</div><div><button class="btn primary">Publish</button> <button class="btn">Send & pin</button></div></div></div></div></div>
+        <div class="grid content-grid"><div class="card panel"><div class="panel-head"><h3>Artifacts</h3><button class="btn">Compare versions</button></div><div id="legend-artifacts"></div><div id="artifact-list"></div></div><div class="card panel detail"><div class="preview"><h3>Artifact preview</h3><p>Markdown/HTML digest preview, source list, publish URL, and verification checks would render here.</p><div id="legend-artifact-checks"></div><div class="kv"><div>Checks</div><div><span class="pill good">HTTP 200</span> <span class="pill good">no local paths</span> <span class="pill good">required sections</span></div><div>Actions</div><div><button class="btn primary">Publish</button> <button class="btn">Send & pin</button></div></div></div></div></div>
       </section>
 
-      <section id="view-schedules" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Schedules</h3><div class="tabs"><button class="tab active">OpenClaw cron</button></div></div><p style="color:var(--muted);margin-top:0">Configured cron activities with last run, next run, and the result of the latest execution.</p><div id="schedule-list"></div></div></section>
-      <section id="view-runs" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Runs</h3><div class="tabs"><button class="tab active">Subagents</button><button class="tab">Commands</button></div></div><div id="run-list"></div></div></section>
-      <section id="view-approvals" class="view hidden"><div class="card panel approval-alert"><div class="panel-head"><h3 style="display:flex;align-items:center;gap:10px"><span class="pulse"></span>Approvals need decision</h3><button class="btn primary">OK safe batch</button></div><p style="color:var(--muted);margin-top:0">Каждая карточка должна иметь явный исход: OK, Deny или Details/Comment. Никаких подвешенных внешних действий.</p><div id="approval-list"></div></div></section>
+      <section id="view-schedules" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Schedules</h3><div class="tabs"><button class="tab active">OpenClaw cron</button></div></div><p style="color:var(--muted);margin-top:0">Configured cron activities with last run, next run, and the result of the latest execution.</p><div id="legend-schedules"></div><div id="schedule-list"></div></div></section>
+      <section id="view-runs" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Runs</h3><div class="tabs"><button class="tab active">Subagents</button><button class="tab">Commands</button></div></div><div id="legend-runs"></div><div id="run-list"></div></div></section>
+      <section id="view-approvals" class="view hidden"><div class="card panel approval-alert"><div class="panel-head"><h3 style="display:flex;align-items:center;gap:10px"><span class="pulse"></span>Approvals need decision</h3><button class="btn primary">OK safe batch</button></div><p style="color:var(--muted);margin-top:0">Каждая карточка должна иметь явный исход: OK, Deny или Details/Comment. Никаких подвешенных внешних действий.</p><div id="legend-approvals"></div><div id="approval-list"></div></div></section>
       <section id="view-ideas" class="view">
         <div class="card panel approval-alert"><div class="panel-head" style="margin-bottom:6px"><h3 style="display:flex;align-items:center;gap:10px"><span class="pulse"></span>2 approvals need decision</h3><button class="btn primary" onclick="document.querySelector('[data-view=approvals]').click()">Review now</button></div><p style="color:var(--muted);margin:0">Есть pending OK/Deny. Пока они не разобраны, они подсвечиваются поверх идей, чтобы решения не терялись.</p></div>
         <div class="grid stats">
           <div class="card stat"><span>Captured ideas</span><b>8</b></div><div class="card stat"><span>Need decision</span><b>3</b></div><div class="card stat"><span>Converted to tasks</span><b>4</b></div><div class="card stat"><span>Parked</span><b>1</b></div>
         </div>
-        <div class="card panel" style="margin-bottom:16px"><div class="panel-head"><h3>Idea intake</h3><button class="btn primary">+ Capture from chat</button></div><p style="color:var(--muted);margin-top:0">Каждая понравившаяся идея получает следующий шаг: <b>convert to project</b>, <b>create tasks</b>, <b>schedule review</b>, или <b>park with reason</b>. Никаких “надо бы потом”.</p></div>
+        <div class="card panel" style="margin-bottom:16px"><div class="panel-head"><h3>Idea intake</h3><button class="btn primary">+ Capture from chat</button></div><p style="color:var(--muted);margin-top:0">Каждая понравившаяся идея получает следующий шаг: <b>convert to project</b>, <b>create tasks</b>, <b>schedule review</b>, или <b>park with reason</b>. Никаких “надо бы потом”.</p><div id="legend-ideas"></div></div>
         <div class="kanban"><div class="card lane"><h3>Captured</h3><div id="ideas-proposed"></div></div><div class="card lane"><h3>Needs decision</h3><div id="ideas-review"></div></div><div class="card lane"><h3>Converted</h3><div id="ideas-approved"></div></div><div class="card lane"><h3>Done / parked</h3><div id="ideas-done"></div></div></div>
       </section>
-      <section id="view-projects" class="view hidden"><div class="grid content-grid"><div class="card panel"><div class="panel-head"><h3>Projects from approved ideas</h3><button class="btn primary">+ New project</button></div><div id="project-list"></div></div><div class="card panel detail"><div class="preview"><h3>Project rule</h3><p>Approved idea should become a project only if it has owner, outcome, next task, and review date.</p><div class="kv"><div>Example</div><div>Clever Cockpit</div><div>Outcome</div><div>Не терять идеи/задачи из чата</div><div>Next</div><div>Create local datastore + add Telegram capture command</div></div></div></div></div></section>
-      <section id="view-tasks" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Tasks</h3><div class="tabs"><button class="tab active">Open</button><button class="tab">Waiting</button><button class="tab">Done</button></div></div><div id="task-list"></div></div></section>
+      <section id="view-projects" class="view hidden"><div class="grid content-grid"><div class="card panel"><div class="panel-head"><h3>Projects from approved ideas</h3><button class="btn primary">+ New project</button></div><div id="legend-projects"></div><div id="project-list"></div></div><div class="card panel detail"><div class="preview"><h3>Project rule</h3><p>Approved idea should become a project only if it has owner, outcome, next task, and review date.</p><div class="kv"><div>Example</div><div>Clever Cockpit</div><div>Outcome</div><div>Не терять идеи/задачи из чата</div><div>Next</div><div>Create local datastore + add Telegram capture command</div></div></div></div></div></section>
+      <section id="view-tasks" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Tasks</h3><div class="tabs"><button class="tab active">Open</button><button class="tab">Waiting</button><button class="tab">Done</button></div></div><div id="legend-tasks"></div><div id="task-list"></div></div></section>
       <section id="view-workflow" class="view hidden">
         <div class="workflow-grid">
           <div class="card panel workflow-map">
             <div class="panel-head"><h3>Idea → Project → Task lifecycle</h3><span class="pill blue">draft-first</span></div>
+            <div id="legend-workflow"></div>
             <svg viewBox="0 0 760 640" preserveAspectRatio="none" aria-hidden="true">
               <defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="rgba(148,163,184,.75)" /></marker></defs>
               <path d="M145 120 C230 120 250 120 330 120" stroke="rgba(148,163,184,.75)" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
@@ -270,7 +276,7 @@
           </div>
         </div>
       </section>
-      <section id="view-health" class="view hidden"><div class="grid stats"><div class="card stat"><span>Telegram index</span><b style="color:var(--good)">Fresh</b></div><div class="card stat"><span>GitHub tools</span><b style="color:var(--good)">Clean</b></div><div class="card stat"><span>SourceCraft</span><b style="color:var(--good)">200</b></div><div class="card stat"><span>Failed jobs</span><b style="color:var(--warn)">0</b></div></div><div class="card panel"><h3>Health checks</h3><div id="health-list"></div></div></section>
+      <section id="view-health" class="view hidden"><div class="grid stats"><div class="card stat"><span>Telegram index</span><b style="color:var(--good)">Fresh</b></div><div class="card stat"><span>GitHub tools</span><b style="color:var(--good)">Clean</b></div><div class="card stat"><span>SourceCraft</span><b style="color:var(--good)">200</b></div><div class="card stat"><span>Failed jobs</span><b style="color:var(--warn)">0</b></div></div><div class="card panel"><h3>Health checks</h3><div id="legend-health"></div><div id="health-list"></div></div></section>
     </main>
   </div>
 
@@ -381,6 +387,9 @@ function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 async function resetDemo() { if (apiAvailable) { normalizeApiState(await api('/api/reset', {})); renderAll(); return; } state = seedState(); saveState(); renderAll(); }
 function escapeHtml(s='') { return String(s).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
 function pill(text, cls='') { return `<span class="pill ${cls}">${escapeHtml(text)}</span>`; }
+function legend(items, title='Legend') {
+  return `<div class="legend"><span class="legend-title">${escapeHtml(title)}</span>${items.map(([label, meaning, cls='']) => `<span class="legend-item">${pill(label, cls)} <span>${escapeHtml(meaning)}</span></span>`).join('')}</div>`;
+}
 function statusClass(status) { return status === 'done' || status === 'approved' || status === 'published' || status === 'success' || status === 'active' ? 'good' : status === 'review' || status === 'in_review' || status === 'waiting' || status === 'scheduled' || status === 'maintenance' || status === 'planning' ? 'warn' : status === 'urgent' || status === 'danger' ? 'bad' : 'blue'; }
 function priorityClass(priority) { return priority === 'urgent' || priority === 'danger' ? 'bad' : priority === 'high' ? 'warn' : 'blue'; }
 function activity(title, body, kind='Activity', status='done', priority='normal') {
@@ -388,6 +397,23 @@ function activity(title, body, kind='Activity', status='done', priority='normal'
   state.activity = state.activity.slice(0, 20);
 }
 function slugify(s) { return s.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-|-$/g, '').slice(0, 48) || `item-${Date.now()}`; }
+
+function renderLegends() {
+  const legends = {
+    'legend-activity': [['System', 'source/type of event', 'blue'], ['Idea', 'idea transition', 'blue'], ['Approval', 'approval decision/event', 'blue'], ['running', 'currently executing', 'warn'], ['done', 'completed successfully', 'good'], ['normal', 'ordinary priority', 'blue'], ['high', 'important priority', 'warn']],
+    'legend-artifacts': [['SourceCraft page', 'published/static page artifact', 'blue'], ['Tool script', 'local reusable script', 'blue'], ['published', 'already public/available', 'good'], ['in_review', 'needs review before use', 'warn'], ['done', 'completed artifact', 'good']],
+    'legend-artifact-checks': [['HTTP 200', 'published URL responds successfully', 'good'], ['no local paths', 'safe to share; no machine paths leaked', 'good'], ['required sections', 'digest/report has mandatory sections', 'good']],
+    'legend-schedules': [['enabled', 'cron job is active', 'good'], ['disabled', 'cron job exists but will not run', 'warn'], ['ok', 'last run succeeded', 'good'], ['never', 'has not run yet', 'blue'], ['not-delivered', 'ran silently / no user message sent', 'blue']],
+    'legend-runs': [['success', 'run completed successfully', 'good'], ['quiet', 'ran without needing notification', 'blue'], ['scheduled', 'planned for later', 'warn']],
+    'legend-approvals': [['external_action', 'would affect something outside local draft state', 'blue'], ['messaging', 'would send/pin a message', 'blue'], ['urgent', 'needs prompt decision', 'bad'], ['high', 'important but not emergency', 'warn'], ['record_only', 'handler records decision only', 'blue'], ['queued', 'accepted and waiting for runner', 'warn']],
+    'legend-ideas': [['converted to project/task', 'idea was accepted and follow-up objects exist', 'good'], ['closed', 'parked or intentionally not pursued now', 'warn'], ['proposed', 'captured but not triaged yet', 'blue'], ['review', 'needs a decision', 'warn'], ['approved', 'accepted for follow-up', 'good']],
+    'legend-projects': [['draft', 'created but not active/confirmed yet', 'warn'], ['active', 'currently being worked', 'good'], ['maintenance', 'ongoing upkeep project', 'warn']],
+    'legend-tasks': [['open', 'ready to work', 'blue'], ['waiting', 'blocked or waiting for input/event', 'warn'], ['done', 'completed', 'good']],
+    'legend-workflow': [['draft-first', 'approved ideas become drafts before becoming active projects', 'blue']],
+    'legend-health': [['good', 'healthy check', 'good'], ['warn', 'watch item / known limitation', 'warn'], ['Fresh', 'index/check is up to date', 'good'], ['Clean', 'no unsynced tooling changes', 'good'], ['200', 'HTTP endpoint responds OK', 'good']],
+  };
+  Object.entries(legends).forEach(([id, items]) => { const el = document.getElementById(id); if (el) el.innerHTML = legend(items); });
+}
 
 function renderCounts() {
   const pending = state.approvals.length;
@@ -525,7 +551,7 @@ function renderStaticLists() {
 }
 function renderAll() {
   document.documentElement.dataset.theme = currentTheme();
-  renderCounts(); renderActivity(); renderApprovals(); renderIdeas(); renderProjects(); renderTasks(); renderStaticLists();
+  renderLegends(); renderCounts(); renderActivity(); renderApprovals(); renderIdeas(); renderProjects(); renderTasks(); renderStaticLists();
   if (!apiAvailable) saveState();
 }
 
