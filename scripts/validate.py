@@ -40,15 +40,22 @@ SERVER_MARKERS = [
     '/api/state',
     '/api/approvals/ready',
     '/api/approvals/complete',
+    '/api/approvals',
     '/api/ideas/transition',
     'run_status',
+    'payload_json',
     'redact_token',
 ]
 RUNNER_MARKERS = [
     'handle_approval',
+    'HANDLERS',
+    'record_only',
+    'telegram_send_and_pin_digest',
+    'sourcecraft_publish',
     '/api/approvals/ready',
     '/api/approvals/complete',
     'needs_handler',
+    'resolve_path',
 ]
 FORBIDDEN_MARKERS = [
     'data-view="architecture"',

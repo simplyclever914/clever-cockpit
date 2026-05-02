@@ -46,6 +46,8 @@ create table if not exists approvals (
   priority text not null default 'normal',
   body text not null default '',
   status text not null default 'pending',
+  handler text,
+  payload_json text,
   run_status text,
   claimed_at text,
   completed_at text,
@@ -133,6 +135,8 @@ def migrate(conn: sqlite3.Connection) -> None:
     columns = {row[1] for row in conn.execute("pragma table_info(approvals)")}
     migrations = {
         "run_status": "alter table approvals add column run_status text",
+        "handler": "alter table approvals add column handler text",
+        "payload_json": "alter table approvals add column payload_json text",
         "claimed_at": "alter table approvals add column claimed_at text",
         "completed_at": "alter table approvals add column completed_at text",
         "last_error": "alter table approvals add column last_error text",
@@ -149,7 +153,7 @@ def seed(conn: sqlite3.Connection, force: bool = False) -> None:
     if conn.execute("select count(*) from ideas").fetchone()[0]:
         return
     t = now()
-    conn.executemany("insert or ignore into approvals(id,title,kind,priority,body,status,created_at,updated_at) values (?,?,?,?,?,?,?,?)", [(a,b,c,d,e,"pending",t,t) for a,b,c,d,e in SEED["approvals"]])
+    conn.executemany("insert or ignore into approvals(id,title,kind,priority,body,status,handler,payload_json,created_at,updated_at) values (?,?,?,?,?,?,?,?,?,?)", [(a,b,c,d,e,"pending","record_only",json.dumps({"note": e}, ensure_ascii=False),t,t) for a,b,c,d,e in SEED["approvals"]])
     conn.executemany("insert or ignore into ideas values (?,?,?,?,?,?,?)", [(a,b,c,d,e,t,t) for a,b,c,d,e in SEED["ideas"]])
     conn.executemany("insert or ignore into projects values (?,?,?,?,?,?,?)", [(a,b,c,d,e,t,t) for a,b,c,d,e in SEED["projects"]])
     conn.executemany("insert or ignore into tasks values (?,?,?,?,?,?,?,?)", [(a,b,c,d,e,f,t,t) for a,b,c,d,e,f in SEED["tasks"]])
@@ -217,6 +221,32 @@ def complete_approval(conn: sqlite3.Connection, approval_id: str, run_status: st
     conn.commit()
     updated = conn.execute("select * from approvals where id=?", (approval_id,)).fetchone()
     return dict(updated) if updated else None
+
+
+def create_approval(conn: sqlite3.Connection, data: dict) -> dict:
+    title = (data.get("title") or "").strip()
+    if not title:
+        raise ValueError("title required")
+    approval_id = (data.get("id") or f"{slugify(title)}-{secrets.token_hex(3)}").strip()
+    kind = (data.get("kind") or "approval").strip()
+    priority = (data.get("priority") or "normal").strip()
+    body = (data.get("body") or "").strip()
+    handler = (data.get("handler") or "record_only").strip()
+    payload = data.get("payload", {})
+    if not isinstance(payload, dict):
+        raise ValueError("payload must be an object")
+    t = now()
+    conn.execute(
+        """
+        insert into approvals(id,title,kind,priority,body,status,handler,payload_json,run_status,claimed_at,completed_at,last_error,created_at,updated_at)
+        values (?,?,?,?,?,?,?,?,null,null,null,null,?,?)
+        """,
+        (approval_id, title, kind, priority, body, "pending", handler, json.dumps(payload, ensure_ascii=False), t, t),
+    )
+    add_activity(conn, f"Approval requested: {title}", body, "Approval", "pending", priority)
+    conn.commit()
+    row = conn.execute("select * from approvals where id=?", (approval_id,)).fetchone()
+    return dict(row)
 
 
 def ensure_token() -> str:
@@ -328,6 +358,13 @@ class Handler(SimpleHTTPRequestHandler):
                     if not updated:
                         self.send_json({"error": "approval not found"}, 404); return
                     self.send_json({"approval": updated, "state": state(conn)})
+                    return
+                elif parsed.path == "/api/approvals":
+                    try:
+                        approval = create_approval(conn, data)
+                    except ValueError as exc:
+                        self.send_json({"error": str(exc)}, 400); return
+                    self.send_json({"approval": approval, "state": state(conn)}, 201)
                     return
                 elif parsed.path == "/api/ideas":
                     title = (data.get("title") or "").strip()

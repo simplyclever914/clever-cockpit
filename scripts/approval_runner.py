@@ -3,14 +3,25 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Callable
 
 ROOT = Path(__file__).resolve().parents[1]
+WORKSPACE = ROOT.parents[1]
 TOKEN_FILE = ROOT / "data" / "token"
+SOURCECRAFT_ENV = WORKSPACE / "skills" / "sourcecraft-publisher" / "config" / ".env"
+SOURCECRAFT_PUBLISHER = WORKSPACE / "skills" / "sourcecraft-publisher" / "scripts" / "publish_static.py"
+TELEGRAM_SEND_AND_PIN = WORKSPACE / "scripts" / "telegram-send-and-pin-digest.mjs"
+
+
+class HandlerError(Exception):
+    pass
 
 
 def load_token(explicit: str | None) -> str:
@@ -31,18 +42,105 @@ def request_json(method: str, base_url: str, token: str, path: str, payload: dic
         return json.loads(resp.read().decode("utf-8"))
 
 
+def payload_for(approval: dict) -> dict:
+    raw = approval.get("payload_json") or "{}"
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HandlerError(f"payload_json is not valid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise HandlerError("payload_json must decode to an object")
+    return payload
+
+
+def resolve_path(value: str, *, allow_tmp: bool = False, must_exist: bool = True) -> Path:
+    if not value:
+        raise HandlerError("path is required")
+    path = Path(value).expanduser().resolve()
+    allowed_roots = [WORKSPACE.resolve()]
+    if allow_tmp:
+        allowed_roots.append(Path("/tmp").resolve())
+    if not any(path == root or root in path.parents for root in allowed_roots):
+        roots = ", ".join(str(r) for r in allowed_roots)
+        raise HandlerError(f"path outside allowed roots ({roots}): {path}")
+    if must_exist and not path.exists():
+        raise HandlerError(f"path does not exist: {path}")
+    return path
+
+
+def load_env_file(path: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    if not path.exists():
+        return env
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            env[key] = value
+    return env
+
+
+def run_checked(cmd: list[str], *, cwd: Path, env: dict[str, str] | None = None, timeout: int = 300) -> str:
+    proc = subprocess.run(cmd, cwd=cwd, env=env, text=True, capture_output=True, timeout=timeout)
+    output = "\n".join(part.strip() for part in [proc.stdout, proc.stderr] if part.strip())
+    if proc.returncode != 0:
+        raise HandlerError(output[-1200:] or f"command failed with exit {proc.returncode}")
+    return output[-1200:] or "ok"
+
+
+def handle_record_only(approval: dict, payload: dict) -> str:
+    return str(payload.get("note") or f"Approval recorded: {approval.get('title', approval.get('id'))}")
+
+
+def handle_telegram_send_and_pin_digest(_approval: dict, payload: dict) -> str:
+    job_key = str(payload.get("job_key") or "").strip()
+    text_file = resolve_path(str(payload.get("text_file") or ""), allow_tmp=True)
+    if job_key not in {"reflection", "ai_wrapup", "telegram_radar"}:
+        raise HandlerError("job_key must be one of reflection, ai_wrapup, telegram_radar")
+    if not TELEGRAM_SEND_AND_PIN.exists():
+        raise HandlerError(f"send-and-pin script not found: {TELEGRAM_SEND_AND_PIN}")
+    return run_checked(["node", str(TELEGRAM_SEND_AND_PIN), job_key, str(text_file)], cwd=WORKSPACE, timeout=120)
+
+
+def handle_sourcecraft_publish(_approval: dict, payload: dict) -> str:
+    source = resolve_path(str(payload.get("source") or ""), allow_tmp=False)
+    slug = str(payload.get("slug") or "").strip()
+    if not slug:
+        raise HandlerError("slug is required")
+    cmd = [sys.executable, str(SOURCECRAFT_PUBLISHER), "--source", str(source), "--slug", slug]
+    if payload.get("date"):
+        cmd += ["--date", str(payload["date"])]
+    if payload.get("message"):
+        cmd += ["--message", str(payload["message"])]
+    env = load_env_file(SOURCECRAFT_ENV)
+    missing = [key for key in ["SOURCECRAFT_TOKEN", "SOURCECRAFT_REPO", "SOURCECRAFT_SITE_URL"] if not env.get(key)]
+    if missing:
+        raise HandlerError(f"missing SourceCraft env: {', '.join(missing)}")
+    return run_checked(cmd, cwd=WORKSPACE, env=env, timeout=300)
+
+
+HANDLERS: dict[str, Callable[[dict, dict], str]] = {
+    "record_only": handle_record_only,
+    "telegram_send_and_pin_digest": handle_telegram_send_and_pin_digest,
+    "sourcecraft_publish": handle_sourcecraft_publish,
+}
+
+
 def handle_approval(approval: dict) -> tuple[str, str]:
     """Return (run_status, message). Keep this registry explicit and safe."""
-    approval_id = approval.get("id", "")
-    title = approval.get("title", approval_id)
-
-    # These seed approvals are policy confirmations, not executable shell commands.
-    # Mark them done so they do not stay stuck, and let future real approvals add
-    # explicit local handlers here.
-    if approval_id in {"publish-page", "send-pin"}:
-        return "done", f"Policy approval recorded: {title}"
-
-    return "needs_handler", f"No local handler registered for approval id={approval_id!r}. Clever must inspect and continue deliberately."
+    handler_name = (approval.get("handler") or "record_only").strip()
+    handler = HANDLERS.get(handler_name)
+    if not handler:
+        return "needs_handler", f"No local handler registered for handler={handler_name!r}, approval id={approval.get('id')!r}."
+    try:
+        message = handler(approval, payload_for(approval))
+    except HandlerError as exc:
+        return "failed", str(exc)
+    return "done", message
 
 
 def poll_once(base_url: str, token: str, limit: int) -> int:

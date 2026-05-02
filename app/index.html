@@ -378,7 +378,10 @@ function itemCard(x, idx) {
 }
 function renderDetail(x=state.activity[0]) {
   if (!x) { $('#detail').innerHTML = '<div class="empty">No activity yet</div>'; return; }
-  $('#detail').innerHTML = `<h3>${escapeHtml(x.title)}</h3><p>${escapeHtml(x.body)}</p><div class="kv"><div>Type</div><div>${escapeHtml(x.kind || x.t || 'activity')}</div><div>Status</div><div>${pill(x.status || 'new', statusClass(x.status))}</div><div>Priority</div><div>${pill(x.priority || 'normal', priorityClass(x.priority))}</div></div><p style="color:var(--muted)">Future version: show source evidence, run logs, diff, and exact command/message before approval.</p>`;
+  const handlerRows = x.handler ? `<div>Handler</div><div>${escapeHtml(x.handler)}</div>` : '';
+  const runRows = x.run_status ? `<div>Run</div><div>${pill(x.run_status, statusClass(x.run_status))}</div>` : '';
+  const errorRows = x.last_error ? `<div>Last error</div><div>${escapeHtml(x.last_error)}</div>` : '';
+  $('#detail').innerHTML = `<h3>${escapeHtml(x.title)}</h3><p>${escapeHtml(x.body)}</p><div class="kv"><div>Type</div><div>${escapeHtml(x.kind || x.t || 'activity')}</div><div>Status</div><div>${pill(x.status || 'new', statusClass(x.status))}</div>${runRows}<div>Priority</div><div>${pill(x.priority || 'normal', priorityClass(x.priority))}</div>${handlerRows}${errorRows}</div><p style="color:var(--muted)">Future version: show source evidence, run logs, diff, and exact command/message before approval.</p>`;
 }
 function renderActivity() {
   $('#item-list').innerHTML = state.activity.length ? state.activity.map(itemCard).join('') : '<div class="empty">All caught up</div>';
@@ -391,7 +394,7 @@ function simpleList(id, rows, type) {
 }
 function renderApprovals() {
   const root = $('#approval-list');
-  root.innerHTML = state.approvals.length ? state.approvals.map(a => `<div class="item" data-approval="${a.id}"><div class="item-top"><div><div class="pill-row">${pill(a.kind,'blue')} ${pill(a.priority,priorityClass(a.priority))}</div><h4>${escapeHtml(a.title)}</h4><p>${escapeHtml(a.body)}</p></div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${a.id}">OK</button><button class="btn" data-action="deny" data-id="${a.id}">Deny</button><button class="btn" data-action="details" data-id="${a.id}">Details</button></div></div>`).join('') : '<div class="empty">No approvals pending. Ideas can flow normally.</div>';
+  root.innerHTML = state.approvals.length ? state.approvals.map(a => `<div class="item" data-approval="${a.id}"><div class="item-top"><div><div class="pill-row">${pill(a.kind,'blue')} ${pill(a.priority,priorityClass(a.priority))} ${a.handler ? pill(a.handler,'blue') : ''} ${a.run_status ? pill(a.run_status,statusClass(a.run_status)) : ''}</div><h4>${escapeHtml(a.title)}</h4><p>${escapeHtml(a.body)}</p></div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${a.id}">OK</button><button class="btn" data-action="deny" data-id="${a.id}">Deny</button><button class="btn" data-action="details" data-id="${a.id}">Details</button></div></div>`).join('') : '<div class="empty">No approvals pending. Ideas can flow normally.</div>';
 }
 function renderIdeas() {
   const lanes = { proposed: $('#ideas-proposed'), review: $('#ideas-review'), approved: $('#ideas-approved'), done: $('#ideas-done') };
@@ -489,7 +492,10 @@ document.addEventListener('click', (event) => {
   const { action, id } = btn.dataset;
   if (action === 'approve') decideApproval(id, 'ok').catch(err => alert(err.message));
   if (action === 'deny') decideApproval(id, 'deny').catch(err => alert(err.message));
-  if (action === 'details') alert(state.approvals.find(a => a.id === id)?.body || 'No details');
+  if (action === 'details') {
+    const a = state.approvals.find(a => a.id === id);
+    alert(a ? `${a.title}\n\n${a.body}\n\nHandler: ${a.handler || 'record_only'}\nRun: ${a.run_status || 'pending'}\nPayload: ${a.payload_json || '{}'}` : 'No details');
+  }
   if (action === 'idea-ok') convertIdea(id, 'ok').catch(err => alert(err.message));
   if (action === 'idea-deny') convertIdea(id, 'deny').catch(err => alert(err.message));
   if (action === 'idea-task') convertIdea(id, 'task').catch(err => alert(err.message));
