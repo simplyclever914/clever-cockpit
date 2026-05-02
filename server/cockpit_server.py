@@ -113,9 +113,9 @@ SEED = {
         ("tooling-sync", "Tooling Sync Discipline", "maintenance", "Dirty reminder, auto-discovery, GitHub push hygiene", None),
     ],
     "tasks": [
-        ("schema", "Define idea lifecycle schema", "Clever Cockpit", "open", "Outcome: document the idea → decision → project/task → done/parked lifecycle. Scope: statuses, required links, and transition rules. Done when: UI and API use the same lifecycle terms.", None),
-        ("local-store", "Create local SQLite store", "Clever Cockpit", "open", "Outcome: persist cockpit state locally. Scope: SQLite schema and state API; Supabase is out of scope for MVP. Done when: ideas/projects/tasks survive restart.", None),
-        ("telegram-capture", "Add /idea capture path from Telegram", "Clever Cockpit", "waiting", "Outcome: capture a Telegram message or command into Cockpit Ideas. Scope: command contract, source link, title/body extraction, and API call. Blocker: choose routing shape.", None),
+        ("schema", "Описать жизненный цикл идеи", "Clever Cockpit", "open", "Результат: зафиксирован понятный цикл идея → решение → проект/задача → готово/отложено. Объём: статусы, обязательные связи и правила переходов. Готово когда: UI и API используют одни и те же термины жизненного цикла.", None),
+        ("local-store", "Создать локальное SQLite-хранилище", "Clever Cockpit", "open", "Результат: состояние Cockpit сохраняется локально. Объём: SQLite-схема и state API; Supabase не входит в MVP. Готово когда: идеи, проекты и задачи переживают перезапуск сервера.", None),
+        ("telegram-capture", "Описать контракт Telegram-команды /idea", "Clever Cockpit", "waiting", "Результат: выбран точный синтаксис захвата идей из Telegram. Объём: /idea text, захват reply-сообщения, опциональные теги/проект и сообщения об ошибках. Готово когда: реализацию можно делать без догадок о пользовательском синтаксисе. Блокер: выбрать финальную грамматику команды.", None),
     ],
     "activity": [
         ("Clever Cockpit local service initialized", "System", "done", "normal", "SQLite-backed LAN-capable cockpit service is ready."),
@@ -288,13 +288,37 @@ def add_activity(conn: sqlite3.Connection, title: str, body: str = "", kind: str
     conn.execute("insert into activity(title,kind,status,priority,body,created_at) values (?,?,?,?,?,?)", (title, kind, status, priority, body, now()))
 
 
+SMOKE_ACTIVITY_TITLE_RE = re.compile(r"^Task (scheduled|reset): (Continue Clever Cockpit MVP|Implement: Telegram command: /idea)$")
+LOW_SIGNAL_TASK_ACTIVITY_RE = re.compile(r"^Task (scheduled|reset): (.+)$")
+
+
+def meaningful_activity(items: list[dict], limit: int = 50) -> list[dict]:
+    """Keep the Activity view focused on real decisions/results, not smoke-test churn."""
+    visible: list[dict] = []
+    seen_low_signal: set[tuple[str, str]] = set()
+    for item in items:
+        title = item.get("title", "")
+        if SMOKE_ACTIVITY_TITLE_RE.match(title):
+            continue
+        match = LOW_SIGNAL_TASK_ACTIVITY_RE.match(title)
+        if match:
+            key = (match.group(1), match.group(2))
+            if key in seen_low_signal:
+                continue
+            seen_low_signal.add(key)
+        visible.append(item)
+        if len(visible) >= limit:
+            break
+    return visible
+
+
 def state(conn: sqlite3.Connection) -> dict:
     return {
         "approvals": rows(conn, "approvals", "where status='pending'"),
         "ideas": rows(conn, "ideas"),
         "projects": rows(conn, "projects"),
         "tasks": rows(conn, "tasks"),
-        "activity": rows(conn, "activity")[:50],
+        "activity": meaningful_activity(rows(conn, "activity"), 50),
         "schedules": cron_schedules(),
     }
 
@@ -366,19 +390,24 @@ def create_approval(conn: sqlite3.Connection, data: dict) -> dict:
     return dict(row)
 
 
-TASK_DESCRIPTION_ERROR = "task description must include Outcome:, Scope:, and Done when: sections with concrete detail"
+TASK_DESCRIPTION_ERROR = "описание задачи должно содержать конкретные разделы: Результат:, Объём:, Готово когда:"
+TASK_DESCRIPTION_SECTIONS = (
+    ("результат:", "outcome:"),
+    ("объём:", "объем:", "scope:"),
+    ("готово когда:", "done when:"),
+)
 
 
 def validate_task_description(body: str) -> None:
     normalized = re.sub(r"\s+", " ", body.strip()).lower()
-    generic = {"", "todo", "tbd", "fix", "fix stuff", "do it", "later", "placeholder", "next step"}
+    generic = {"", "todo", "tbd", "fix", "fix stuff", "do it", "later", "placeholder", "next step", "потом", "доделать", "разобраться"}
     if normalized in generic or len(normalized) < 80:
         raise ValueError(TASK_DESCRIPTION_ERROR)
-    required_sections = ("outcome:", "scope:", "done when:")
-    if not all(section in normalized for section in required_sections):
-        raise ValueError(TASK_DESCRIPTION_ERROR)
-    for section in required_sections:
-        after = normalized.split(section, 1)[1].strip()
+    for aliases in TASK_DESCRIPTION_SECTIONS:
+        marker = next((section for section in aliases if section in normalized), None)
+        if not marker:
+            raise ValueError(TASK_DESCRIPTION_ERROR)
+        after = normalized.split(marker, 1)[1].strip()
         if not after or after.split(" ", 5)[0] in generic:
             raise ValueError(TASK_DESCRIPTION_ERROR)
 
@@ -587,8 +616,8 @@ class Handler(SimpleHTTPRequestHandler):
                         project_id = slugify(idea["title"])
                         task_id = f"{project_id}-next"
                         conn.execute("insert or ignore into projects values (?,?,?,?,?,?,?)", (project_id, idea["title"], "draft", "Draft project created from approved idea. Confirm before making active.", idea_id, t, t))
-                        task_title = f"Implement: {idea['title']}" if action == "task" else f"Define next step: {idea['title']}"
-                        task_body = "Outcome: turn the approved idea into one clear next action. Scope: clarify owner, expected artifact, and done criteria before running. Done when: the project/task relationship is explicit and the next execution step is unambiguous. Trigger defaults to manual; press Run to queue execution or Schedule for 04:30 MSK."
+                        task_title = f"Реализовать: {idea['title']}" if action == "task" else f"Определить следующий шаг: {idea['title']}"
+                        task_body = "Результат: одобренная идея превращена в одно понятное следующее действие. Объём: уточнить владельца, ожидаемый артефакт и критерии готовности перед запуском. Готово когда: связь проект/задача явная, а следующий шаг исполнения не требует догадок. По умолчанию задача запускается вручную через Run или планируется на 04:30 MSK."
                         if not conn.execute("select 1 from tasks where id=?", (task_id,)).fetchone():
                             create_task(conn, {"id": task_id, "title": task_title, "project": idea["title"], "status": "open", "body": task_body, "source_idea_id": idea_id, "trigger": "manual", "run_status": "idle"})
                         add_activity(conn, f"Converted idea: {idea['title']}", "Created draft project/task follow-up with manual trigger.", "Idea", "approved", "high")
