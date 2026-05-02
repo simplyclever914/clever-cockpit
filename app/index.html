@@ -115,6 +115,10 @@
     .item h4 { margin:4px 0 8px; font-size:15px; }
     .item p { margin:0; color:var(--muted); font-size:13px; line-height:1.45; }
     .item-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .link-btn { border:1px solid var(--border2); border-radius:999px; background:color-mix(in srgb,var(--blue) 9%, transparent); color:var(--blue); padding:5px 9px; cursor:pointer; font-size:12px; }
+    .link-btn:hover { border-color:color-mix(in srgb,var(--blue) 45%, transparent); background:color-mix(in srgb,var(--blue) 15%, transparent); }
+    .relation-row { display:flex; flex-wrap:wrap; gap:7px; align-items:center; margin-top:10px; color:var(--muted); font-size:12px; }
+    .item.active-task { border-color:color-mix(in srgb,var(--accent) 55%, transparent); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%, transparent); }
     .empty { border:1px dashed var(--border2); border-radius:18px; padding:18px; color:var(--muted); text-align:center; background:rgba(255,255,255,.025); }
     .pill-row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
     .pill { border:1px solid var(--border); border-radius:999px; padding:3px 8px; font-size:11px; color:var(--muted); background:rgba(255,255,255,.035); }
@@ -157,6 +161,14 @@
     .wf-node.feedback { border-color:color-mix(in srgb,var(--soft) 45%,transparent); }
     .rule-list { display:grid; gap:10px; }
     .rule-list .item h4 { margin-bottom:4px; }
+    .drawer-backdrop { position:fixed; inset:0; z-index:20; background:rgba(0,0,0,.34); backdrop-filter: blur(2px); opacity:0; pointer-events:none; transition:.18s opacity; }
+    .drawer-backdrop.open { opacity:1; pointer-events:auto; }
+    .drawer { position:fixed; z-index:21; top:0; right:0; width:min(520px, 96vw); height:100vh; padding:18px; border-left:1px solid var(--border); background:color-mix(in srgb,var(--bg2) 88%, black 12%); box-shadow:-30px 0 90px rgba(0,0,0,.38); transform:translateX(105%); transition:.2s transform; overflow:auto; }
+    .drawer.open { transform:translateX(0); }
+    .drawer-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:12px; }
+    .drawer-head h3 { margin:0; font-size:24px; letter-spacing:-.035em; }
+    .drawer-section { margin-top:16px; }
+    .drawer-section h4 { margin:0 0 8px; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.11em; }
     .hidden { display:none !important; }
     @media (max-width: 980px) {
       body { overflow:auto; }
@@ -279,6 +291,8 @@
       <section id="view-health" class="view hidden"><div class="grid stats"><div class="card stat"><span>Telegram index</span><b style="color:var(--good)">Fresh</b></div><div class="card stat"><span>GitHub tools</span><b style="color:var(--good)">Clean</b></div><div class="card stat"><span>SourceCraft</span><b style="color:var(--good)">200</b></div><div class="card stat"><span>Failed jobs</span><b style="color:var(--warn)">0</b></div></div><div class="card panel"><h3>Health checks</h3><div id="legend-health"></div><div id="health-list"></div></div></section>
     </main>
   </div>
+  <div id="drawer-backdrop" class="drawer-backdrop"></div>
+  <div id="detail-drawer" class="drawer" aria-live="polite"></div>
 
 <script>
 const STORAGE_KEY = 'clever-cockpit:v2';
@@ -397,6 +411,26 @@ function activity(title, body, kind='Activity', status='done', priority='normal'
   state.activity = state.activity.slice(0, 20);
 }
 function slugify(s) { return s.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-|-$/g, '').slice(0, 48) || `item-${Date.now()}`; }
+function projectKey(value='') { return slugify(value); }
+function projectForIdea(idea) {
+  return state.projects.find(p => p.source_idea_id === idea.id)
+    || state.projects.find(p => p.id === idea.id || p.id === projectKey(idea.title) || p.title === idea.title)
+    || null;
+}
+function tasksForProject(project) {
+  if (!project) return [];
+  const keys = new Set([project.id, project.title, projectKey(project.title)].filter(Boolean));
+  return state.tasks.filter(t => (project.source_idea_id && t.source_idea_id === project.source_idea_id) || keys.has(t.project) || keys.has(projectKey(t.project || '')));
+}
+function projectForTask(task) {
+  return state.projects.find(p => task.source_idea_id && p.source_idea_id === task.source_idea_id)
+    || state.projects.find(p => p.title === task.project || p.id === task.project || p.id === projectKey(task.project || ''))
+    || null;
+}
+function ideaForProject(project) { return project?.source_idea_id ? state.ideas.find(i => i.id === project.source_idea_id) : null; }
+function linkedProjectButton(project, text='Open project') { return project ? `<button class="link-btn" data-action="open-project" data-id="${escapeHtml(project.id)}">${escapeHtml(text)}: ${escapeHtml(project.title)}</button>` : '<span class="pill blue">no linked project yet</span>'; }
+function linkedIdeaButton(idea) { return idea ? `<button class="link-btn" data-action="open-idea" data-id="${escapeHtml(idea.id)}">Source idea: ${escapeHtml(idea.title)}</button>` : ''; }
+function taskButtons(tasks, projectId='') { return tasks.length ? tasks.map((t, idx) => `<button class="link-btn" data-action="open-task" data-id="${escapeHtml(t.id)}" data-project="${escapeHtml(projectId)}">${idx === 0 ? 'Active task' : 'Task'}: ${escapeHtml(t.title)}</button>`).join('') : '<span class="pill blue">no linked tasks yet</span>'; }
 
 function renderLegends() {
   const legends = {
@@ -507,20 +541,33 @@ function renderIdeas() {
   Object.values(lanes).forEach(el => el.innerHTML = '');
   state.ideas.forEach(idea => {
     const lane = lanes[idea.status] || lanes.done;
+    const project = projectForIdea(idea);
+    const tasks = tasksForProject(project);
     const needsAction = ['proposed','review'].includes(idea.status);
     const converted = idea.status === 'approved';
     const actions = needsAction
       ? `<div class="item-actions"><button class="btn primary" data-action="idea-ok" data-id="${idea.id}">OK</button><button class="btn" data-action="idea-deny" data-id="${idea.id}">Deny</button><button class="btn" data-action="idea-task" data-id="${idea.id}">Make task</button></div>`
       : `<div class="item-actions">${pill(converted ? 'converted to project/task' : 'closed', converted ? 'good' : 'warn')}</div>`;
-    lane.insertAdjacentHTML('beforeend', `<div class="item" data-idea="${idea.id}"><h4>${escapeHtml(idea.title)}</h4><p>${escapeHtml(idea.body)}</p>${actions}</div>`);
+    const relations = `<div class="relation-row"><span>Linked:</span>${linkedProjectButton(project)}${project ? `<button class="link-btn" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}">Tasks: ${tasks.length}</button>` : ''}</div>`;
+    lane.insertAdjacentHTML('beforeend', `<div class="item" data-idea="${idea.id}" data-action="open-idea" data-id="${idea.id}"><h4>${escapeHtml(idea.title)}</h4><p>${escapeHtml(idea.body)}</p>${relations}${actions}</div>`);
   });
   Object.values(lanes).forEach(el => { if (!el.innerHTML.trim()) el.innerHTML = '<div class="empty">Empty</div>'; });
 }
 function renderProjects() {
-  simpleList('project-list', state.projects.map(p => [p.title, p.status, p.status, p.body]), 'project');
+  const root = $('#project-list');
+  root.innerHTML = state.projects.length ? state.projects.map(p => {
+    const tasks = tasksForProject(p);
+    const active = tasks.find(t => t.status === 'open') || tasks[0];
+    const idea = ideaForProject(p);
+    return `<div class="item" data-project="${escapeHtml(p.id)}" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}"><div class="item-top"><div><div class="pill-row">${pill(p.status,'blue')} ${pill(p.status,statusClass(p.status))}</div><h4>${escapeHtml(p.title)}</h4><p>${escapeHtml(p.body)}</p></div></div><div class="relation-row">${linkedIdeaButton(idea)}<button class="link-btn" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}">Tasks: ${tasks.length}${active ? ` · active: ${escapeHtml(active.title)}` : ''}</button></div></div>`;
+  }).join('') : '<div class="empty">Nothing here yet</div>';
 }
 function renderTasks() {
-  simpleList('task-list', state.tasks.map(t => [t.title, t.project, t.status, t.body]), 'task');
+  const root = $('#task-list');
+  root.innerHTML = state.tasks.length ? state.tasks.map(t => {
+    const project = projectForTask(t);
+    return `<div class="item" data-task="${escapeHtml(t.id)}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="item-top"><div><div class="pill-row">${pill(t.project || 'project','blue')} ${pill(t.status || '', statusClass(t.status))}</div><h4>${escapeHtml(t.title)}</h4><p>${escapeHtml(t.body)}</p></div></div><div class="relation-row"><span>Project:</span>${linkedProjectButton(project, 'Open')}</div></div>`;
+  }).join('') : '<div class="empty">Nothing here yet</div>';
 }
 function formatTime(value) {
   if (!value) return '—';
@@ -596,6 +643,33 @@ async function captureIdea() {
   showView('ideas');
   renderAll();
 }
+function openDrawer(html) {
+  const drawer = $('#detail-drawer');
+  drawer.innerHTML = html;
+  $('#drawer-backdrop').classList.add('open');
+  drawer.classList.add('open');
+}
+function closeDrawer() { $('#drawer-backdrop').classList.remove('open'); $('#detail-drawer').classList.remove('open'); }
+function drawerHead(title, subtitle='') { return `<div class="drawer-head"><div><h3>${escapeHtml(title)}</h3>${subtitle ? `<p style="color:var(--muted);margin:6px 0 0">${escapeHtml(subtitle)}</p>` : ''}</div><button class="btn" data-action="close-drawer">Close</button></div>`; }
+function openIdeaDrawer(id) {
+  const idea = state.ideas.find(i => i.id === id); if (!idea) return;
+  const project = projectForIdea(idea);
+  const tasks = tasksForProject(project);
+  openDrawer(`${drawerHead(idea.title, 'Idea details')}<div class="pill-row">${pill(idea.status, statusClass(idea.status))}</div><p>${escapeHtml(idea.body)}</p><div class="drawer-section"><h4>Linked project</h4><div class="relation-row">${linkedProjectButton(project)}</div></div><div class="drawer-section"><h4>Linked tasks</h4><div class="relation-row">${taskButtons(tasks, project?.id || '')}</div></div>`);
+}
+function openProjectDrawer(id, highlightTaskId='') {
+  const project = state.projects.find(p => p.id === id || p.title === id); if (!project) return;
+  const idea = ideaForProject(project);
+  const tasks = tasksForProject(project);
+  const active = highlightTaskId || (tasks.find(t => t.status === 'open') || tasks[0])?.id || '';
+  const taskList = tasks.length ? tasks.map(t => `<div class="item ${t.id === active ? 'active-task' : ''}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="pill-row">${pill(t.status, statusClass(t.status))} ${t.id === active ? pill('active task','good') : ''}</div><h4>${escapeHtml(t.title)}</h4><p>${escapeHtml(t.body)}</p><div class="relation-row"><span>Project:</span>${pill(project.title, 'blue')}</div></div>`).join('') : '<div class="empty">No linked tasks yet</div>';
+  openDrawer(`${drawerHead(project.title, 'Project details + linked tasks')}<div class="pill-row">${pill(project.status, statusClass(project.status))}</div><p>${escapeHtml(project.body)}</p><div class="drawer-section"><h4>Source idea</h4><div class="relation-row">${linkedIdeaButton(idea) || '<span class="pill blue">no source idea recorded</span>'}</div></div><div class="drawer-section"><h4>Tasks linked to this project</h4>${taskList}</div>`);
+}
+function openTaskDrawer(id) {
+  const task = state.tasks.find(t => t.id === id); if (!task) return;
+  const project = projectForTask(task);
+  openDrawer(`${drawerHead(task.title, 'Task details')}<div class="pill-row">${pill(task.status, statusClass(task.status))}</div><p>${escapeHtml(task.body)}</p><div class="drawer-section"><h4>Project</h4><div class="relation-row">${linkedProjectButton(project)}</div></div>${project ? `<div class="drawer-section"><button class="btn primary" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}" data-task="${escapeHtml(task.id)}">Open project task list with this task highlighted</button></div>` : ''}`);
+}
 function showView(v) {
   $$('.nav-btn').forEach(b => b.classList.remove('active'));
   const btn = $(`[data-view="${v}"]`);
@@ -614,9 +688,12 @@ $('#reset-demo').onclick = () => { if (confirm('Reset demo data?')) resetDemo().
 $('#new-idea').onclick = captureIdea;
 $('#review-approvals').onclick = () => showView('approvals');
 $('#view-ideas .approval-alert button').onclick = () => showView('approvals');
+$('#drawer-backdrop').onclick = closeDrawer;
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeDrawer(); });
 document.addEventListener('click', (event) => {
   const btn = event.target.closest('[data-action]');
   if (!btn) return;
+  event.stopPropagation();
   const { action, id } = btn.dataset;
   if (action === 'approve') decideApproval(id, 'ok').catch(err => alert(err.message));
   if (action === 'deny') decideApproval(id, 'deny').catch(err => alert(err.message));
@@ -627,6 +704,11 @@ document.addEventListener('click', (event) => {
   if (action === 'idea-ok') convertIdea(id, 'ok').catch(err => alert(err.message));
   if (action === 'idea-deny') convertIdea(id, 'deny').catch(err => alert(err.message));
   if (action === 'idea-task') convertIdea(id, 'task').catch(err => alert(err.message));
+  if (action === 'open-idea') openIdeaDrawer(id);
+  if (action === 'open-project') openProjectDrawer(id);
+  if (action === 'open-project-tasks') openProjectDrawer(id, btn.dataset.task || '');
+  if (action === 'open-task') openTaskDrawer(id);
+  if (action === 'close-drawer') closeDrawer();
 });
 refreshFromApi();
 </script>
