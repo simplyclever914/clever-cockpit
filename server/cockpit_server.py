@@ -196,14 +196,14 @@ def transition_task(conn: sqlite3.Connection, task_id: str, action: str) -> dict
         return None
     t = now()
     if action == "run":
-        conn.execute("update tasks set trigger='manual', run_status='queued', scheduled_for=null, last_error=null, updated_at=? where id=?", (t, task_id))
+        conn.execute("update tasks set status='waiting', trigger='manual', run_status='queued', scheduled_for=null, last_error=null, updated_at=? where id=?", (t, task_id))
         add_activity(conn, f"Task queued: {task['title']}", task["body"], "Task", "queued", "high")
     elif action == "schedule":
         scheduled_for = next_msk_0430()
-        conn.execute("update tasks set trigger='schedule', run_status='scheduled', scheduled_for=?, last_error=null, updated_at=? where id=?", (scheduled_for, t, task_id))
+        conn.execute("update tasks set status='scheduled', trigger='schedule', run_status='scheduled', scheduled_for=?, last_error=null, updated_at=? where id=?", (scheduled_for, t, task_id))
         add_activity(conn, f"Task scheduled: {task['title']}", f"Scheduled for next 04:30 MSK ({scheduled_for}).", "Task", "scheduled", "normal")
     elif action == "reset":
-        conn.execute("update tasks set trigger='manual', run_status='idle', scheduled_for=null, last_error=null, updated_at=? where id=?", (t, task_id))
+        conn.execute("update tasks set status='open', trigger='manual', run_status='idle', scheduled_for=null, last_error=null, updated_at=? where id=?", (t, task_id))
         add_activity(conn, f"Task reset: {task['title']}", task["body"], "Task", "open", "normal")
     elif action == "done":
         conn.execute("update tasks set status='done', run_status='done', last_run_at=?, last_error=null, updated_at=? where id=?", (t, t, task_id))

@@ -565,16 +565,17 @@ function renderProjects() {
 }
 function taskRunClass(status) { return ['done'].includes(status) ? 'good' : ['failed'].includes(status) ? 'bad' : ['queued','scheduled','running'].includes(status) ? 'warn' : 'blue'; }
 function taskActionButtons(t) {
-  const busy = ['queued','running'].includes(t.run_status);
+  const busy = ['queued','scheduled','running'].includes(t.run_status);
   const done = t.status === 'done' || t.run_status === 'done';
   if (done) return `<div class="item-actions">${pill('closed', 'good')}${t.run_status && !['done','idle'].includes(t.run_status) ? `<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button>` : ''}</div>`;
-  return `<div class="item-actions"><button class="btn primary" data-action="task-run" data-id="${escapeHtml(t.id)}" ${busy ? 'disabled' : ''}>Run</button><button class="btn" data-action="task-schedule" data-id="${escapeHtml(t.id)}" ${busy ? 'disabled' : ''}>Schedule 04:30</button><button class="btn" data-action="task-done" data-id="${escapeHtml(t.id)}">Mark done</button>${t.run_status && t.run_status !== 'idle' ? `<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button>` : ''}</div>`;
+  if (busy) return `<div class="item-actions">${pill(t.run_status, taskRunClass(t.run_status))}<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button></div>`;
+  return `<div class="item-actions"><button class="btn primary" data-action="task-run" data-id="${escapeHtml(t.id)}">Run</button><button class="btn" data-action="task-schedule" data-id="${escapeHtml(t.id)}">Schedule 04:30</button><button class="btn" data-action="task-done" data-id="${escapeHtml(t.id)}">Mark done</button>${t.run_status && t.run_status !== 'idle' ? `<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button>` : ''}</div>`;
 }
 function taskMatchesFilter(t) {
   const run = t.run_status || 'idle';
   if (taskFilter === 'done') return t.status === 'done' || run === 'done';
-  if (taskFilter === 'waiting') return t.status === 'waiting' || ['queued','scheduled','running','failed'].includes(run);
-  return t.status !== 'done' && t.status !== 'waiting' && !['queued','scheduled','running','failed','done'].includes(run);
+  if (taskFilter === 'waiting') return ['waiting','scheduled'].includes(t.status) || ['queued','scheduled','running','failed'].includes(run);
+  return !['done','waiting','scheduled'].includes(t.status) && !['queued','scheduled','running','failed','done'].includes(run);
 }
 function renderTaskTabs() {
   $$('#view-tasks .tab').forEach(tab => tab.classList.toggle('active', tab.dataset.taskFilter === taskFilter));
@@ -656,9 +657,9 @@ async function transitionTask(id, action) {
   if (apiAvailable) { normalizeApiState(await api('/api/tasks/transition', { id, action })); renderAll(); return; }
   const task = state.tasks.find(t => t.id === id);
   if (!task) return;
-  if (action === 'run') { task.trigger = 'manual'; task.run_status = 'queued'; task.scheduled_for = null; }
-  if (action === 'schedule') { task.trigger = 'schedule'; task.run_status = 'scheduled'; task.scheduled_for = 'next 04:30 MSK'; }
-  if (action === 'reset') { task.trigger = 'manual'; task.run_status = 'idle'; task.scheduled_for = null; }
+  if (action === 'run') { task.status = 'waiting'; task.trigger = 'manual'; task.run_status = 'queued'; task.scheduled_for = null; }
+  if (action === 'schedule') { task.status = 'scheduled'; task.trigger = 'schedule'; task.run_status = 'scheduled'; task.scheduled_for = 'next 04:30 MSK'; }
+  if (action === 'reset') { task.status = 'open'; task.trigger = 'manual'; task.run_status = 'idle'; task.scheduled_for = null; }
   if (action === 'done') { task.status = 'done'; task.run_status = 'done'; task.last_run_at = new Date().toISOString(); }
   renderAll();
 }
