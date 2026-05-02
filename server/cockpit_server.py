@@ -628,6 +628,22 @@ class Handler(SimpleHTTPRequestHandler):
                             create_task(conn, {"id": task_id, "title": task_title, "project": idea["title"], "status": "open", "body": task_body, "source_idea_id": idea_id, "trigger": "manual", "run_status": "idle"})
                         add_activity(conn, f"Converted idea: {idea['title']}", "Created draft project/task follow-up with manual trigger.", "Idea", "approved", "high")
                     conn.commit()
+                elif parsed.path == "/api/projects/transition":
+                    project_id = data["id"]
+                    action = data.get("action", "archive")
+                    project = conn.execute("select * from projects where id=?", (project_id,)).fetchone()
+                    if not project:
+                        self.send_json({"error": "project not found"}, 404); return
+                    t = now()
+                    if action == "archive":
+                        status = "archived"
+                    elif action == "restore":
+                        status = "maintenance"
+                    else:
+                        self.send_json({"error": "invalid project action"}, 400); return
+                    conn.execute("update projects set status=?, updated_at=? where id=?", (status, t, project_id))
+                    add_activity(conn, f"Project {status}: {project['title']}", project["body"], "Project", status)
+                    conn.commit()
                 elif parsed.path == "/api/tasks":
                     try:
                         task = create_task(conn, data)

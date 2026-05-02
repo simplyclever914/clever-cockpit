@@ -126,6 +126,7 @@
     .link-btn:hover { border-color:color-mix(in srgb,var(--blue) 45%, transparent); background:color-mix(in srgb,var(--blue) 15%, transparent); }
     .relation-row { display:flex; flex-wrap:wrap; gap:7px; align-items:center; margin-top:10px; color:var(--muted); font-size:12px; }
     .item.active-task { border-color:color-mix(in srgb,var(--accent) 55%, transparent); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%, transparent); }
+    .item.archived-project { opacity:.58; }
     .item.running-task { border-color:color-mix(in srgb,var(--warn) 65%, transparent); background:linear-gradient(135deg, color-mix(in srgb,var(--warn) 12%, transparent), var(--glass2)); box-shadow:0 0 0 3px color-mix(in srgb,var(--warn) 14%, transparent), 0 18px 60px rgba(0,0,0,.24); }
     .empty { border:1px dashed var(--border2); border-radius:18px; padding:18px; color:var(--muted); text-align:center; background:rgba(255,255,255,.025); }
     .pill-row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
@@ -526,7 +527,7 @@ function renderLegends() {
     'legend-runs': [['success', 'run completed successfully', 'good'], ['quiet', 'ran without needing notification', 'blue'], ['scheduled', 'planned for later', 'warn']],
     'legend-approvals': [['external_action', 'would affect something outside local draft state', 'blue'], ['messaging', 'would send/pin a message', 'blue'], ['urgent', 'needs prompt decision', 'bad'], ['high', 'important but not emergency', 'warn'], ['record_only', 'handler records decision only', 'blue'], ['queued', 'accepted and waiting for runner', 'warn']],
     'legend-ideas': [['converted to project/task', 'idea was accepted and follow-up objects exist', 'good'], ['closed', 'parked or intentionally not pursued now', 'warn'], ['proposed', 'captured but not triaged yet', 'blue'], ['review', 'needs a decision', 'warn'], ['approved', 'accepted for follow-up', 'good']],
-    'legend-projects': [['draft', 'created but not active/confirmed yet', 'warn'], ['active', 'currently being worked', 'good'], ['maintenance', 'ongoing upkeep project', 'warn']],
+    'legend-projects': [['draft', 'created but not active/confirmed yet', 'warn'], ['active', 'currently being worked', 'good'], ['maintenance', 'ongoing upkeep project', 'warn'], ['archived', 'kept for history, hidden from active attention', 'blue']],
     'legend-tasks': [['manual', 'does not execute until Run is pressed', 'blue'], ['idle', 'not queued yet', 'blue'], ['queued', 'waiting for task runner', 'warn'], ['scheduled', 'will run at 04:30 MSK', 'warn'], ['running', 'runner is executing now', 'warn'], ['done', 'completed', 'good'], ['failed', 'runner failed; needs attention', 'bad'], ['waiting', 'blocked or waiting for input/event', 'warn']],
     'legend-workflow': [['draft-first', 'approved ideas become drafts before becoming active projects', 'blue']],
     'legend-health': [['good', 'healthy check', 'good'], ['warn', 'watch item / known limitation', 'warn'], ['Fresh', 'index/check is up to date', 'good'], ['Clean', 'no unsynced tooling changes', 'good'], ['200', 'HTTP endpoint responds OK', 'good']],
@@ -538,7 +539,7 @@ function renderCounts() {
   const pending = state.approvals.length;
   const ideas = state.ideas.length;
   const tasks = state.tasks.length;
-  const projects = state.projects.length;
+  const projects = state.projects.filter(p => p.status !== 'archived').length;
   const needDecision = state.ideas.filter(i => ['proposed','review'].includes(i.status)).length;
   const converted = state.ideas.filter(i => i.status === 'approved').length;
   const parked = state.ideas.filter(i => i.status === 'done').length;
@@ -642,13 +643,13 @@ function renderIdeas() {
 }
 function renderProjects() {
   const root = $('#project-list');
-  const projectRank = p => ({ active:0, planning:1, draft:2, maintenance:3, done:4 }[p.status] ?? 5);
+  const projectRank = p => ({ active:0, planning:1, draft:2, maintenance:3, done:4, archived:5 }[p.status] ?? 6);
   const projects = [...state.projects].sort((a,b) => projectRank(a) - projectRank(b) || a.title.localeCompare(b.title));
   root.innerHTML = projects.length ? projects.map(p => {
     const tasks = tasksForProject(p);
     const active = tasks.find(t => t.status === 'open') || tasks[0];
     const idea = ideaForProject(p);
-    return `<div class="item" data-project="${escapeHtml(p.id)}" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}"><div class="item-top"><div><div class="pill-row">${pill(p.status,'blue')} ${pill(p.status,statusClass(p.status))}</div><h4>${escapeHtml(p.title)}</h4><p>${escapeHtml(p.body)}</p></div></div><div class="relation-row">${linkedIdeaButton(idea)}<button class="link-btn" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}">Tasks: ${tasks.length}${active ? ` · active: ${escapeHtml(active.title)}` : ''}</button></div></div>`;
+    return `<div class="item ${p.status === 'archived' ? 'archived-project' : ''}" data-project="${escapeHtml(p.id)}" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}"><div class="item-top"><div><div class="pill-row">${pill(p.status,'blue')} ${pill(p.status,statusClass(p.status))}</div><h4>${escapeHtml(p.title)}</h4><p>${escapeHtml(p.body)}</p></div></div><div class="relation-row">${linkedIdeaButton(idea)}<button class="link-btn" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}">Tasks: ${tasks.length}${active ? ` · active: ${escapeHtml(active.title)}` : ''}</button></div></div>`;
   }).join('') : '<div class="empty">Nothing here yet</div>';
 }
 function taskRunClass(status) { return ['done'].includes(status) ? 'good' : ['failed'].includes(status) ? 'bad' : ['queued','scheduled','running'].includes(status) ? 'warn' : 'blue'; }
@@ -767,6 +768,14 @@ async function transitionTask(id, action) {
   if (action === 'done') { task.status = 'done'; task.run_status = 'done'; task.last_run_at = new Date().toISOString(); }
   renderAll();
 }
+async function transitionProject(id, action) {
+  if (apiAvailable) { applyApiState(await api('/api/projects/transition', { id, action }), { force:true }); openProjectDrawer(id); return; }
+  const project = state.projects.find(p => p.id === id);
+  if (!project) return;
+  project.status = action === 'archive' ? 'archived' : 'maintenance';
+  activity(`Project ${project.status}: ${project.title}`, project.body, 'Project', project.status, 'normal');
+  renderAll(); openProjectDrawer(id);
+}
 async function saveTask(id, form) {
   const payload = { id, title: form.elements.title.value, body: form.elements.body.value, status: form.elements.status.value };
   if (apiAvailable) { applyApiState(await api('/api/tasks/update', payload), { force:true }); openTaskDrawer(id); return; }
@@ -825,7 +834,10 @@ function openProjectDrawer(id, highlightTaskId='') {
   const tasks = tasksForProject(project);
   const active = highlightTaskId || (tasks.find(t => t.status === 'open') || tasks[0])?.id || '';
   const taskList = tasks.length ? tasks.sort((a,b) => taskSortRank(a) - taskSortRank(b)).map(t => `<div class="item ${t.id === active ? 'active-task' : ''}${(t.run_status || 'idle') === 'running' ? ' running-task' : ''}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="pill-row">${pill(t.status, statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))} ${t.id === active ? pill('active task','good') : ''}</div><h4>${escapeHtml(t.title)}</h4>${taskDescription(t)}${taskBlocker(t)}<div class="relation-row"><span>Project:</span>${pill(project.title, 'blue')}</div>${taskActionButtons(t)}</div>`).join('') : '<div class="empty">No linked tasks yet</div>';
-  openDrawer(`${drawerHead(project.title, 'Project details + linked tasks')}<div class="pill-row">${pill(project.status, statusClass(project.status))}</div><p>${escapeHtml(project.body)}</p><div class="drawer-section"><h4>Source idea</h4><div class="relation-row">${linkedIdeaButton(idea) || '<span class="pill blue">no source idea recorded</span>'}</div></div><div class="drawer-section"><h4>Tasks linked to this project</h4>${taskList}</div>`);
+  const archiveAction = project.status === 'archived'
+    ? `<button class="btn primary" data-action="project-restore" data-id="${escapeHtml(project.id)}">Restore to maintenance</button>`
+    : `<button class="btn" data-action="project-archive" data-id="${escapeHtml(project.id)}">Archive project</button>`;
+  openDrawer(`${drawerHead(project.title, 'Project details + linked tasks')}<div class="pill-row">${pill(project.status, statusClass(project.status))}</div><p>${escapeHtml(project.body)}</p><div class="drawer-section"><h4>Source idea</h4><div class="relation-row">${linkedIdeaButton(idea) || '<span class="pill blue">no source idea recorded</span>'}</div></div><div class="drawer-section"><h4>Project actions</h4><div class="item-actions">${archiveAction}</div></div><div class="drawer-section"><h4>Tasks linked to this project</h4>${taskList}</div>`);
 }
 function openTaskDrawer(id) {
   const task = state.tasks.find(t => t.id === id); if (!task) return;
@@ -871,6 +883,8 @@ document.addEventListener('click', (event) => {
   if (action === 'open-idea') openIdeaDrawer(id);
   if (action === 'open-project') openProjectDrawer(id);
   if (action === 'open-project-tasks') openProjectDrawer(id, btn.dataset.task || '');
+  if (action === 'project-archive') transitionProject(id, 'archive').catch(err => alert(err.message));
+  if (action === 'project-restore') transitionProject(id, 'restore').catch(err => alert(err.message));
   if (action === 'open-task') openTaskDrawer(id);
   if (action === 'task-run') transitionTask(id, 'run').catch(err => alert(err.message));
   if (action === 'task-schedule') transitionTask(id, 'schedule').catch(err => alert(err.message));
