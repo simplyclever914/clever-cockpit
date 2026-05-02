@@ -175,9 +175,9 @@
         <button class="nav-btn" data-view="tasks">✅ Tasks <span class="badge">9</span></button>
         <button class="nav-btn" data-view="workflow">🗺 Workflow</button>
         <button class="nav-btn" data-view="activity">📜 Activity <span class="badge">0</span></button>
-        <button class="nav-btn" data-view="inbox">📥 Inbox <span class="badge">5</span></button>
         <button class="nav-btn" data-view="artifacts">🗂 Artifacts</button>
         <div class="nav-section">System</div>
+        <button class="nav-btn" data-view="schedules">🕒 Schedules <span class="badge">0</span></button>
         <button class="nav-btn" data-view="runs">⚙️ Runs</button>
         <button class="nav-btn" data-view="health">🩺 Health</button>
       </nav>
@@ -204,19 +204,6 @@
         <div class="actions"><button class="btn" id="reset-demo">Reset demo</button><button class="btn" id="new-idea">New idea</button><button class="btn primary" id="review-approvals">Review approvals</button></div>
       </div>
 
-      <section id="view-inbox" class="view hidden">
-        <div class="grid stats">
-          <div class="card stat"><span>Attention</span><b>6</b></div><div class="card stat"><span>Published today</span><b>2</b></div><div class="card stat"><span>Pending approvals</span><b>2</b></div><div class="card stat"><span>Health</span><b style="color:var(--good)">OK</b></div>
-        </div>
-        <div class="grid content-grid">
-          <div class="card panel">
-            <div class="panel-head"><h3>Attention feed</h3><div class="tabs"><button class="tab active">All</button><button class="tab">Urgent</button><button class="tab">Digest</button><button class="tab">System</button></div></div>
-            <div id="item-list"></div>
-          </div>
-          <div class="card panel detail"><div id="detail" class="preview"></div></div>
-        </div>
-      </section>
-
       <section id="view-activity" class="view hidden">
         <div class="grid content-grid">
           <div class="card panel">
@@ -232,7 +219,8 @@
         <div class="grid content-grid"><div class="card panel"><div class="panel-head"><h3>Artifacts</h3><button class="btn">Compare versions</button></div><div id="artifact-list"></div></div><div class="card panel detail"><div class="preview"><h3>Artifact preview</h3><p>Markdown/HTML digest preview, source list, publish URL, and verification checks would render here.</p><div class="kv"><div>Checks</div><div><span class="pill good">HTTP 200</span> <span class="pill good">no local paths</span> <span class="pill good">required sections</span></div><div>Actions</div><div><button class="btn primary">Publish</button> <button class="btn">Send & pin</button></div></div></div></div></div>
       </section>
 
-      <section id="view-runs" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Runs</h3><div class="tabs"><button class="tab active">Cron</button><button class="tab">Subagents</button><button class="tab">Commands</button></div></div><div id="run-list"></div></div></section>
+      <section id="view-schedules" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Schedules</h3><div class="tabs"><button class="tab active">OpenClaw cron</button></div></div><p style="color:var(--muted);margin-top:0">Configured cron activities with last run, next run, and the result of the latest execution.</p><div id="schedule-list"></div></div></section>
+      <section id="view-runs" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Runs</h3><div class="tabs"><button class="tab active">Subagents</button><button class="tab">Commands</button></div></div><div id="run-list"></div></div></section>
       <section id="view-approvals" class="view hidden"><div class="card panel approval-alert"><div class="panel-head"><h3 style="display:flex;align-items:center;gap:10px"><span class="pulse"></span>Approvals need decision</h3><button class="btn primary">OK safe batch</button></div><p style="color:var(--muted);margin-top:0">Каждая карточка должна иметь явный исход: OK, Deny или Details/Comment. Никаких подвешенных внешних действий.</p><div id="approval-list"></div></div></section>
       <section id="view-ideas" class="view">
         <div class="card panel approval-alert"><div class="panel-head" style="margin-bottom:6px"><h3 style="display:flex;align-items:center;gap:10px"><span class="pulse"></span>2 approvals need decision</h3><button class="btn primary" onclick="document.querySelector('[data-view=approvals]').click()">Review now</button></div><p style="color:var(--muted);margin:0">Есть pending OK/Deny. Пока они не разобраны, они подсвечиваются поверх идей, чтобы решения не терялись.</p></div>
@@ -240,7 +228,7 @@
           <div class="card stat"><span>Captured ideas</span><b>8</b></div><div class="card stat"><span>Need decision</span><b>3</b></div><div class="card stat"><span>Converted to tasks</span><b>4</b></div><div class="card stat"><span>Parked</span><b>1</b></div>
         </div>
         <div class="card panel" style="margin-bottom:16px"><div class="panel-head"><h3>Idea intake</h3><button class="btn primary">+ Capture from chat</button></div><p style="color:var(--muted);margin-top:0">Каждая понравившаяся идея получает следующий шаг: <b>convert to project</b>, <b>create tasks</b>, <b>schedule review</b>, или <b>park with reason</b>. Никаких “надо бы потом”.</p></div>
-        <div class="kanban"><div class="card lane"><h3>Inbox / captured</h3><div id="ideas-proposed"></div></div><div class="card lane"><h3>Needs decision</h3><div id="ideas-review"></div></div><div class="card lane"><h3>Converted</h3><div id="ideas-approved"></div></div><div class="card lane"><h3>Done / parked</h3><div id="ideas-done"></div></div></div>
+        <div class="kanban"><div class="card lane"><h3>Captured</h3><div id="ideas-proposed"></div></div><div class="card lane"><h3>Needs decision</h3><div id="ideas-review"></div></div><div class="card lane"><h3>Converted</h3><div id="ideas-approved"></div></div><div class="card lane"><h3>Done / parked</h3><div id="ideas-done"></div></div></div>
       </section>
       <section id="view-projects" class="view hidden"><div class="grid content-grid"><div class="card panel"><div class="panel-head"><h3>Projects from approved ideas</h3><button class="btn primary">+ New project</button></div><div id="project-list"></div></div><div class="card panel detail"><div class="preview"><h3>Project rule</h3><p>Approved idea should become a project only if it has owner, outcome, next task, and review date.</p><div class="kv"><div>Example</div><div>Clever Cockpit</div><div>Outcome</div><div>Не терять идеи/задачи из чата</div><div>Next</div><div>Create local datastore + add Telegram capture command</div></div></div></div></div></section>
       <section id="view-tasks" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Tasks</h3><div class="tabs"><button class="tab active">Open</button><button class="tab">Waiting</button><button class="tab">Done</button></div></div><div id="task-list"></div></div></section>
@@ -315,7 +303,10 @@ const seedState = () => ({
     { id: 'clever-cockpit', title: 'Clever Cockpit', status: 'active', body: 'Goal: stop losing ideas/tasks in chat; source: BentoBoard-inspired prototype' },
     { id: 'daily-reviews', title: 'Daily Reviews Pipeline', status: 'active', body: 'AI wrap-up + Telegram review + quality gates + SourceCraft publish' },
     { id: 'tooling-sync', title: 'Tooling Sync Discipline', status: 'maintenance', body: 'Dirty reminder, auto-discovery, GitHub push hygiene' },
-    { id: 'personal-ops', title: 'OpenClaw Personal Ops', status: 'planning', body: 'Memory, reflection loop, health checks, calendar/inbox later' }
+    { id: 'personal-ops', title: 'OpenClaw Personal Ops', status: 'planning', body: 'Memory, reflection loop, health checks, calendar and reminders later' }
+  ],
+  schedules: [
+    { name: 'Daily AI wrap-up', schedule: 'cron 30 9 * * * (Europe/Moscow)', enabled: true, last_run_at: null, next_run_at: null, last_status: 'never', description: 'Generate, publish, send, and pin the daily AI/agentic dev digest.' }
   ],
   tasks: [
     { id: 'schema', title: 'Define idea lifecycle schema', project: 'Clever Cockpit', status: 'open', body: 'idea → decision → project/task → done/parked' },
@@ -366,6 +357,7 @@ function normalizeApiState(data) {
   state.projects = data.projects || [];
   state.tasks = data.tasks || [];
   state.activity = data.activity || [];
+  state.schedules = data.schedules || [];
   state.theme = theme;
 }
 async function refreshFromApi() {
@@ -410,7 +402,7 @@ function renderCounts() {
   setBadge('projects', projects);
   setBadge('tasks', tasks);
   setBadge('activity', state.activity.length);
-  setBadge('inbox', state.activity.length);
+  setBadge('schedules', (state.schedules || []).length);
 
   const navApproval = $('[data-view="approvals"]');
   navApproval.classList.toggle('urgent-nav', pending > 0);
@@ -428,11 +420,6 @@ function renderCounts() {
     stats[1].textContent = needDecision;
     stats[2].textContent = converted;
     stats[3].textContent = parked;
-  }
-  const inboxStats = $$('#view-inbox .stat b');
-  if (inboxStats.length >= 4) {
-    inboxStats[0].textContent = state.activity.length;
-    inboxStats[2].textContent = pending;
   }
 }
 function setBadge(view, count, hot=false) {
@@ -504,10 +491,32 @@ function renderProjects() {
 function renderTasks() {
   simpleList('task-list', state.tasks.map(t => [t.title, t.project, t.status, t.body]), 'task');
 }
+function formatTime(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'short', timeStyle: 'short' });
+}
+function formatDuration(ms) {
+  if (!ms) return '—';
+  const sec = Math.round(ms / 1000);
+  if (sec < 90) return `${sec}s`;
+  const min = Math.round(sec / 60);
+  if (min < 120) return `${min}m`;
+  return `${Math.round(min / 60)}h`;
+}
+function scheduleStatusClass(status) { return ['ok','success','done'].includes(status) ? 'good' : ['failed','error','needs_retry','needs_handler'].includes(status) ? 'bad' : status === 'never' ? 'blue' : 'warn'; }
+function renderSchedules() {
+  const root = $('#schedule-list');
+  if (!root) return;
+  const schedules = state.schedules || [];
+  root.innerHTML = schedules.length ? schedules.map(s => `<div class="item"><div class="item-top"><div><div class="pill-row">${pill(s.enabled ? 'enabled' : 'disabled', s.enabled ? 'good' : 'warn')} ${pill(s.last_status || 'never', scheduleStatusClass(s.last_status))} ${s.last_delivery_status ? pill(s.last_delivery_status, 'blue') : ''}</div><h4>${escapeHtml(s.name)}</h4><p>${escapeHtml(s.description || s.schedule || '')}</p></div></div><div class="kv"><div>Schedule</div><div>${escapeHtml(s.schedule || '—')}</div><div>Last run</div><div>${formatTime(s.last_run_at)}</div><div>Next run</div><div>${formatTime(s.next_run_at)}</div><div>Duration</div><div>${formatDuration(s.last_duration_ms)}</div><div>Errors</div><div>${escapeHtml(s.consecutive_errors ?? 0)}</div></div></div>`).join('') : '<div class="empty">No schedules configured</div>';
+}
 function renderStaticLists() {
   simpleList('artifact-list', artifacts, 'artifact');
   simpleList('run-list', runs, 'run');
   simpleList('health-list', health, 'health');
+  renderSchedules();
 }
 function renderAll() {
   document.documentElement.dataset.theme = currentTheme();
@@ -566,7 +575,7 @@ function showView(v) {
   $('#view-desc').textContent = titles[v][1];
 }
 
-const titles = {ideas:['Ideas','Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.'],projects:['Projects','Approved ideas grouped into outcomes with owners, next tasks, and review dates.'],tasks:['Tasks','Concrete next actions created from ideas, projects, digests, and operational work.'],workflow:['Workflow','The lifecycle that connects ideas, decisions, draft projects, tasks, approvals, schedules, and activity feedback.'],activity:['Activity','Chronological event log: runs, approvals, idea transitions, publications, errors, and outcomes.'],inbox:['Inbox','Attention feed: approvals, failures, useful finds, and reminders.'],approvals:['Approvals','Human-in-the-loop queue with OK/Deny buttons for external, destructive, expensive, or sensitive actions.'],artifacts:['Artifacts','Digest drafts, SourceCraft pages, generated reports, scripts, and compareable outputs.'],runs:['Runs','Cron jobs, subagents, background commands, last success and logs.'],health:['Health','Freshness checks, sync state, publish checks, and operational risks.']};
+const titles = {ideas:['Ideas','Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.'],projects:['Projects','Approved ideas grouped into outcomes with owners, next tasks, and review dates.'],tasks:['Tasks','Concrete next actions created from ideas, projects, digests, and operational work.'],workflow:['Workflow','The lifecycle that connects ideas, decisions, draft projects, tasks, approvals, schedules, and activity feedback.'],activity:['Activity','Chronological event log: runs, approvals, idea transitions, publications, errors, and outcomes.'],schedules:['Schedules','Configured OpenClaw cron activities with last run, next run, and last execution status.'],approvals:['Approvals','Human-in-the-loop queue with OK/Deny buttons for external, destructive, expensive, or sensitive actions.'],artifacts:['Artifacts','Digest drafts, SourceCraft pages, generated reports, scripts, and compareable outputs.'],runs:['Runs','Subagents, background commands, last success and logs.'],health:['Health','Freshness checks, sync state, publish checks, and operational risks.']};
 
 $$('.nav-btn').forEach(btn => btn.onclick = () => showView(btn.dataset.view));
 $$('[data-theme-btn]').forEach(btn => btn.onclick = () => { setTheme(btn.dataset.themeBtn); renderAll(); });

@@ -18,6 +18,7 @@ APP_DIR = ROOT / "app"
 DATA_DIR = ROOT / "data"
 DB_PATH = Path(os.environ.get("CLEVER_COCKPIT_DB", DATA_DIR / "cockpit.sqlite"))
 TOKEN_FILE = DATA_DIR / "token"
+CRON_DIR = Path(os.environ.get("OPENCLAW_CRON_DIR", Path.home() / ".openclaw" / "cron"))
 
 
 def now() -> str:
@@ -168,6 +169,72 @@ def rows(conn: sqlite3.Connection, table: str, where: str = "", args: tuple = ()
     return [dict(r) for r in conn.execute(f"select * from {table} {where} order by {order}", args)]
 
 
+def read_json_file(path: Path, default: object) -> object:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return default
+
+
+def ms_to_iso(ms: int | float | None) -> str | None:
+    if not ms:
+        return None
+    return datetime.fromtimestamp(float(ms) / 1000, timezone.utc).isoformat(timespec="seconds")
+
+
+def describe_schedule(schedule: dict) -> str:
+    kind = schedule.get("kind")
+    if kind == "cron":
+        tz = schedule.get("tz") or "host local time"
+        return f"cron {schedule.get('expr', '?')} ({tz})"
+    if kind == "every":
+        every_ms = schedule.get("everyMs")
+        if isinstance(every_ms, (int, float)) and every_ms > 0:
+            minutes = every_ms / 60000
+            if minutes.is_integer() and minutes < 120:
+                return f"every {int(minutes)} min"
+            hours = minutes / 60
+            if hours.is_integer():
+                return f"every {int(hours)} h"
+        return f"every {every_ms} ms"
+    if kind == "at":
+        return f"at {schedule.get('at', '?')}"
+    return kind or "unknown"
+
+
+def cron_schedules() -> list[dict]:
+    jobs_data = read_json_file(CRON_DIR / "jobs.json", {"jobs": []})
+    state_data = read_json_file(CRON_DIR / "jobs-state.json", {"jobs": {}})
+    jobs = jobs_data.get("jobs", []) if isinstance(jobs_data, dict) else []
+    states = state_data.get("jobs", {}) if isinstance(state_data, dict) else {}
+    out: list[dict] = []
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        job_id = job.get("id") or job.get("jobId")
+        if not job_id:
+            continue
+        job_state = states.get(job_id, {}).get("state", {}) if isinstance(states, dict) else {}
+        schedule = job.get("schedule") or {}
+        last_status = job_state.get("lastRunStatus") or job_state.get("lastStatus")
+        out.append({
+            "id": job_id,
+            "name": job.get("name") or job_id,
+            "description": job.get("description") or "",
+            "enabled": bool(job.get("enabled", True)),
+            "schedule": describe_schedule(schedule if isinstance(schedule, dict) else {}),
+            "schedule_kind": schedule.get("kind") if isinstance(schedule, dict) else None,
+            "last_run_at": ms_to_iso(job_state.get("lastRunAtMs")),
+            "next_run_at": ms_to_iso(job_state.get("nextRunAtMs")),
+            "last_status": last_status or "never",
+            "last_duration_ms": job_state.get("lastDurationMs"),
+            "last_delivery_status": job_state.get("lastDeliveryStatus"),
+            "consecutive_errors": job_state.get("consecutiveErrors", 0),
+            "consecutive_skipped": job_state.get("consecutiveSkipped", 0),
+        })
+    return sorted(out, key=lambda x: (x.get("next_run_at") or "9999", x.get("name") or ""))
+
+
 def add_activity(conn: sqlite3.Connection, title: str, body: str = "", kind: str = "Activity", status: str = "done", priority: str = "normal") -> None:
     conn.execute("insert into activity(title,kind,status,priority,body,created_at) values (?,?,?,?,?,?)", (title, kind, status, priority, body, now()))
 
@@ -179,6 +246,7 @@ def state(conn: sqlite3.Connection) -> dict:
         "projects": rows(conn, "projects"),
         "tasks": rows(conn, "tasks"),
         "activity": rows(conn, "activity")[:50],
+        "schedules": cron_schedules(),
     }
 
 
