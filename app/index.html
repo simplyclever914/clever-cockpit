@@ -182,6 +182,9 @@
     .edit-form input, .edit-form textarea, .edit-form select { width:100%; border:1px solid var(--border2); border-radius:13px; background:var(--glass2); color:var(--text); padding:10px 12px; outline:none; text-transform:none; letter-spacing:normal; }
     .edit-form textarea { min-height:170px; resize:vertical; line-height:1.45; }
     .edit-form input:focus, .edit-form textarea:focus, .edit-form select:focus { border-color:color-mix(in srgb,var(--accent) 48%,transparent); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent); }
+    .sync-indicator { position:fixed; right:18px; bottom:18px; z-index:30; max-width:320px; border:1px solid var(--border2); border-radius:999px; background:var(--glass); color:var(--muted); padding:8px 11px; font-size:12px; box-shadow:var(--shadow); backdrop-filter:blur(20px); opacity:0; transform:translateY(8px); pointer-events:none; transition:.18s opacity,.18s transform; }
+    .sync-indicator.visible { opacity:1; transform:translateY(0); }
+    .sync-indicator.warn { color:var(--warn); border-color:color-mix(in srgb,var(--warn) 38%, transparent); }
     .hidden { display:none !important; }
     @media (max-width: 980px) {
       body { overflow:auto; }
@@ -307,6 +310,7 @@
   </div>
   <div id="drawer-backdrop" class="drawer-backdrop"></div>
   <div id="detail-drawer" class="drawer" aria-live="polite"></div>
+  <div id="sync-indicator" class="sync-indicator" aria-live="polite"></div>
 
 <script>
 const STORAGE_KEY = 'clever-cockpit:v2';
@@ -377,6 +381,11 @@ let taskFilter = 'open';
 const API_TOKEN = new URLSearchParams(location.search).get('token') || localStorage.getItem('clever-cockpit-token') || '';
 if (API_TOKEN) localStorage.setItem('clever-cockpit-token', API_TOKEN);
 let apiAvailable = false;
+let refreshTimer = null;
+let refreshInFlight = false;
+let pendingExternalState = null;
+let syncIndicatorTimer = null;
+let lastStateSignature = '';
 async function api(path, data) {
   const headers = { 'Content-Type': 'application/json' };
   if (API_TOKEN) headers.Authorization = `Bearer ${API_TOKEN}`;
@@ -397,11 +406,62 @@ function normalizeApiState(data) {
   state.schedules = data.schedules || [];
   state.theme = theme;
 }
-async function refreshFromApi() {
+function stateSignature(data) {
+  data = data.state || data;
+  return JSON.stringify({ approvals:data.approvals || [], ideas:data.ideas || [], projects:data.projects || [], tasks:data.tasks || [], activity:data.activity || [], schedules:data.schedules || [] });
+}
+function isEditingTask() { return Boolean(document.querySelector('#detail-drawer.open form[data-task-edit]')); }
+function showSyncIndicator(text, tone='') {
+  const el = $('#sync-indicator');
+  if (!el) return;
+  el.textContent = text;
+  el.className = `sync-indicator visible ${tone}`.trim();
+  clearTimeout(syncIndicatorTimer);
+  syncIndicatorTimer = setTimeout(() => el.classList.remove('visible'), tone === 'warn' ? 3500 : 1200);
+}
+function applyApiState(data, { source='manual', force=false } = {}) {
+  const signature = stateSignature(data);
+  if (!force && signature === lastStateSignature) { apiAvailable = true; return false; }
+  if (!force && isEditingTask()) {
+    if (signature !== lastStateSignature) {
+      pendingExternalState = data;
+      apiAvailable = true;
+      showSyncIndicator('Есть внешние изменения — сохраните или закройте редактирование', 'warn');
+    }
+    return false;
+  }
+  normalizeApiState(data);
+  lastStateSignature = signature;
+  pendingExternalState = null;
+  apiAvailable = true;
+  renderAll();
+  if (source === 'poll') showSyncIndicator('Обновлено');
+  return true;
+}
+async function refreshFromApi({ source='manual', force=false } = {}) {
+  if (refreshInFlight) return;
+  refreshInFlight = true;
   try {
     const data = await api('/api/state');
-    normalizeApiState(data); apiAvailable = true; renderAll();
-  } catch { apiAvailable = false; renderAll(); }
+    applyApiState(data, { source, force });
+  } catch {
+    apiAvailable = false;
+    if (source !== 'poll') renderAll();
+  } finally {
+    refreshInFlight = false;
+  }
+}
+function startAutoRefresh() {
+  clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => {
+    if (!apiAvailable) return;
+    const hasLiveTasks = state.tasks.some(t => ['queued','running','scheduled'].includes(t.run_status || 'idle'));
+    const period = hasLiveTasks ? 2000 : 5000;
+    if (!startAutoRefresh.last || Date.now() - startAutoRefresh.last >= period) {
+      startAutoRefresh.last = Date.now();
+      refreshFromApi({ source:'poll' });
+    }
+  }, 1000);
 }
 function loadState() {
   try {
@@ -414,7 +474,7 @@ function loadState() {
   } catch { return seedState(); }
 }
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-async function resetDemo() { if (apiAvailable) { normalizeApiState(await api('/api/reset', {})); renderAll(); return; } state = seedState(); saveState(); renderAll(); }
+async function resetDemo() { if (apiAvailable) { applyApiState(await api('/api/reset', {}), { force:true }); return; } state = seedState(); saveState(); renderAll(); }
 function escapeHtml(s='') { return String(s).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
 function taskDescription(t, label='Описание') { return `<details class="task-description"><summary>${escapeHtml(label)}</summary><p>${escapeHtml(t.body || 'Описание задачи ещё не задано — перед запуском нужно уточнить результат, объём работ и критерии готовности.')}</p></details>`; }
 function taskBlocker(t) { return t.last_error ? `<div class="task-blocker"><b>Блокер / последняя ошибка:</b> ${escapeHtml(t.last_error)}</div>` : ''; }
@@ -654,7 +714,7 @@ function renderAll() {
 }
 
 async function decideApproval(id, decision) {
-  if (apiAvailable) { normalizeApiState(await api('/api/approvals/decide', { id, decision: decision === 'ok' ? 'accepted' : 'rejected' })); renderAll(); return; }
+  if (apiAvailable) { applyApiState(await api('/api/approvals/decide', { id, decision: decision === 'ok' ? 'accepted' : 'rejected' }), { force:true }); return; }
   const approval = state.approvals.find(a => a.id === id);
   if (!approval) return;
   state.approvals = state.approvals.filter(a => a.id !== id);
@@ -662,7 +722,7 @@ async function decideApproval(id, decision) {
   renderAll();
 }
 async function convertIdea(id, mode) {
-  if (apiAvailable) { normalizeApiState(await api('/api/ideas/transition', { id, action: mode === 'deny' ? 'deny' : mode === 'task' ? 'task' : 'ok' })); renderAll(); return; }
+  if (apiAvailable) { applyApiState(await api('/api/ideas/transition', { id, action: mode === 'deny' ? 'deny' : mode === 'task' ? 'task' : 'ok' }), { force:true }); return; }
   const idea = state.ideas.find(i => i.id === id);
   if (!idea) return;
   if (mode === 'deny') {
@@ -684,7 +744,7 @@ async function convertIdea(id, mode) {
   renderAll();
 }
 async function transitionTask(id, action) {
-  if (apiAvailable) { normalizeApiState(await api('/api/tasks/transition', { id, action })); renderAll(); return; }
+  if (apiAvailable) { applyApiState(await api('/api/tasks/transition', { id, action }), { force:true }); return; }
   const task = state.tasks.find(t => t.id === id);
   if (!task) return;
   if (action === 'run') { task.status = 'waiting'; task.trigger = 'manual'; task.run_status = 'queued'; task.scheduled_for = null; }
@@ -695,7 +755,7 @@ async function transitionTask(id, action) {
 }
 async function saveTask(id, form) {
   const payload = { id, title: form.elements.title.value, body: form.elements.body.value, status: form.elements.status.value };
-  if (apiAvailable) { normalizeApiState(await api('/api/tasks/update', payload)); renderAll(); openTaskDrawer(id); return; }
+  if (apiAvailable) { applyApiState(await api('/api/tasks/update', payload), { force:true }); openTaskDrawer(id); return; }
   const task = state.tasks.find(t => t.id === id);
   if (!task) return;
   task.title = payload.title.trim();
@@ -710,7 +770,7 @@ async function captureIdea() {
   const title = prompt('Idea title?');
   if (!title) return;
   const body = prompt('Why does this matter / next hint?', 'Captured manually from chat or thought.') || 'Captured manually.';
-  if (apiAvailable) { normalizeApiState(await api('/api/ideas', { title, body, source: 'ui' })); showView('ideas'); renderAll(); return; }
+  if (apiAvailable) { applyApiState(await api('/api/ideas', { title, body, source: 'ui' }), { force:true }); showView('ideas'); return; }
   const id = `${slugify(title)}-${Date.now().toString(36)}`;
   state.ideas.unshift({ id, title, body, status: 'proposed' });
   activity(`Captured idea: ${title}`, body, 'Idea', 'proposed', 'normal');
@@ -723,7 +783,7 @@ function openDrawer(html) {
   $('#drawer-backdrop').classList.add('open');
   drawer.classList.add('open');
 }
-function closeDrawer() { $('#drawer-backdrop').classList.remove('open'); $('#detail-drawer').classList.remove('open'); }
+function closeDrawer() { $('#drawer-backdrop').classList.remove('open'); $('#detail-drawer').classList.remove('open'); if (pendingExternalState) applyApiState(pendingExternalState, { source:'poll', force:true }); }
 function drawerHead(title, subtitle='') { return `<div class="drawer-head"><div><h3>${escapeHtml(title)}</h3>${subtitle ? `<p style="color:var(--muted);margin:6px 0 0">${escapeHtml(subtitle)}</p>` : ''}</div><button class="btn" data-action="close-drawer">Close</button></div>`; }
 function openIdeaDrawer(id) {
   const idea = state.ideas.find(i => i.id === id); if (!idea) return;
@@ -795,7 +855,8 @@ document.addEventListener('click', (event) => {
   }
   if (action === 'close-drawer') closeDrawer();
 });
-refreshFromApi();
+refreshFromApi({ force:true });
+startAutoRefresh();
 </script>
 </body>
 </html>
