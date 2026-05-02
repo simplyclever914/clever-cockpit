@@ -1,1 +1,21 @@
-schema: repo-implementation-slice
+schema: spec-driven
+
+context: |
+  Product: Clever Cockpit, a BentoBoard-inspired local cockpit for OpenClaw/Clever.
+  Primary outcome: ideas from chat must become tracked decisions, projects, or tasks instead of disappearing.
+  Current implementation: dependency-free static HTML prototype in app/index.html with browser LocalStorage.
+  UX priorities:
+  - Approvals appear first and are visually highlighted when pending.
+  - Ideas, Projects, and Tasks are primary; operations/health are secondary.
+  - Every idea should have an explicit next state: decide, convert, task, done, or parked with reason.
+
+rules:
+  specs:
+    - Use delta spec format with ADDED/MODIFIED/REMOVED Requirements sections.
+    - Every requirement must include at least one #### Scenario block.
+    - Requirements must describe observable user behavior, not implementation internals.
+  design:
+    - Keep the first MVP static/local unless a requirement explicitly needs persistence or integration.
+    - Record alternatives and tradeoffs instead of assuming a backend.
+  tasks:
+    - Use numbered checkbox tasks that are small enough to verify in one session.

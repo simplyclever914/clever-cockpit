@@ -1,32 +1,29 @@
-# Local Proposal: Initial Clever Cockpit / clever-cockpit
+## Why
 
-## Parent product change
+Useful ideas, approvals, and follow-up tasks are currently scattered across chat and ad hoc notes. Clever Cockpit should become the lightweight place where ideas are captured, decided, converted into projects/tasks, and not forgotten.
 
-N/A for MVP. This is the first repository and product slice for Clever Cockpit. If the work later touches OpenClaw core/runtime, create a parent product change and link it here.
+## What Changes
 
-## Implements requirements
+- Add an Ideas-first cockpit UI based on the BentoBoard visual style.
+- Place Approvals at the top of navigation and highlight them when pending.
+- Add explicit OK/Deny controls for approval decisions.
+- Add Projects and Tasks as primary sections so approved ideas have an obvious destination.
+- Keep Runs, Health, and Artifacts as secondary supporting views.
+- Keep the first MVP static and local-state only; no backend or OpenClaw runtime integration yet.
 
-- Capture ideas from chat so they do not disappear.
-- Promote approved ideas into projects and concrete tasks.
-- Surface pending approvals at the top and highlight them when non-empty.
-- Provide a BentoBoard-like cockpit UX without depending on Supabase/Next for the first MVP.
+## Capabilities
 
-## Local scope
+### New Capabilities
 
-- Static clickable prototype in `app/index.html`.
-- LocalStorage-backed state for ideas, projects, tasks, approvals, and activity.
-- OpenSpec docs and validation scripts.
-- No external service writes from the app.
+- `cockpit-mvp`: Captures the initial user-facing Clever Cockpit behavior for approvals, ideas, projects, tasks, and secondary operational views.
 
-## Out of scope
+### Modified Capabilities
 
-- Real OpenClaw API integration.
-- Authentication/multi-user permissions.
-- Supabase or persistent server database.
-- Telegram command integration.
-- Production deployment hardening.
+None. This is the first vanilla OpenSpec change in the repository.
 
-## Dependencies
+## Impact
 
-- Browser with LocalStorage.
-- Python 3 for local static serving and validation.
+- `app/index.html`: static prototype UI and local interaction model.
+- `openspec/`: vanilla OpenSpec config, change artifacts, and delta specs.
+- `scripts/validate.py`: repository validation should use vanilla OpenSpec validation plus static HTML checks.
+- GitHub Actions: validation should run OpenSpec and static checks.

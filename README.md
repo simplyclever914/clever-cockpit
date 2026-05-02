@@ -2,7 +2,7 @@
 
 BentoBoard-inspired local cockpit for OpenClaw/Clever focused on **ideas, projects, tasks, and approvals** so useful thoughts do not disappear in chat.
 
-This repository is intentionally SDD-first: product/UX decisions live in OpenSpec artifacts before implementation details grow.
+This repository is intentionally SDD-first using vanilla Fission-AI/OpenSpec: product/UX decisions live in OpenSpec artifacts before implementation details grow.
 
 ## Current MVP
 
@@ -11,7 +11,7 @@ This repository is intentionally SDD-first: product/UX decisions live in OpenSpe
   - approvals can be `OK`/`Deny`/`Details`;
   - ideas can be approved, denied/parked, or converted into tasks;
   - approved ideas become project/task material rather than dead chat notes.
-- OpenSpec repo-level implementation slice in `openspec/changes/initial-cockpit/`.
+- Vanilla OpenSpec `spec-driven` change in `openspec/changes/initial-cockpit/`.
 
 ## Run locally
 
@@ -28,10 +28,10 @@ python3 scripts/validate.py
 
 ## SDD / OpenSpec stance
 
-We use a lightweight OpenSpec implementation-slice flow:
+We use Fission-AI/OpenSpec default `spec-driven` flow:
 
 ```text
-proposal → design → specs → tasks → validation → implementation evidence
+proposal → specs → design → tasks → apply → sync/archive
 ```
 
-Human decisions own scope and tradeoffs. Agents draft, critique, implement, and gather evidence.
+OpenSpec is intentionally fluid: artifacts can be updated as we learn. Human decisions own scope and tradeoffs; agents draft, critique, implement, and gather evidence.

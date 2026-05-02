@@ -1,15 +1,30 @@
-# OpenSpec / SDD notes
+# OpenSpec notes
 
-Studied source: `openspec-crossrepo-sdd`.
+This repository uses vanilla [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec), not the local cross-repo SDD derivative.
 
-## Ideology used here
+## Philosophy applied
 
-- Specs are the source of truth for *what and why*; code is the implementation of an accepted slice.
-- Keep the repo-level flow lightweight: proposal, design, specs, tasks, validation.
-- Record tradeoffs and non-goals explicitly so future agents do not re-litigate decisions.
-- Acceptance criteria must be testable and tied to user-visible behavior.
-- Human approval is required for scope, risky actions, and rollout decisions.
+- Fluid, not rigid: artifacts can be updated as we learn.
+- Iterative, not waterfall: implementation can refine proposal/specs/design.
+- Easy, not complex: use the default `spec-driven` schema.
+- Brownfield-friendly: future changes should be deltas against `openspec/specs/`.
 
-## Why not product-crossrepo here?
+## Workflow
 
-Clever Cockpit is currently one implementation repository and one product surface. A heavy cross-repo product schema would add ceremony without value. If this later splits into OpenClaw plugin + backend + web UI, create a central product change and repo slices.
+Default quick path:
+
+```text
+/opsx:propose → /opsx:apply → /opsx:sync → /opsx:archive
+```
+
+Current active change:
+
+```text
+openspec/changes/initial-cockpit/
+  proposal.md
+  specs/cockpit-mvp/spec.md
+  design.md
+  tasks.md
+```
+
+Specs describe observable behavior. Design explains technical choices. Tasks are the implementation checklist.
