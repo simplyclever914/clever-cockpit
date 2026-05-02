@@ -249,7 +249,7 @@
         <div class="kanban"><div class="card lane"><h3>Captured</h3><div id="ideas-proposed"></div></div><div class="card lane"><h3>Needs decision</h3><div id="ideas-review"></div></div><div class="card lane"><h3>Converted</h3><div id="ideas-approved"></div></div><div class="card lane"><h3>Done / parked</h3><div id="ideas-done"></div></div></div>
       </section>
       <section id="view-projects" class="view hidden"><div class="grid content-grid"><div class="card panel"><div class="panel-head"><h3>Projects from approved ideas</h3><button class="btn primary">+ New project</button></div><div id="legend-projects"></div><div id="project-list"></div></div><div class="card panel detail"><div class="preview"><h3>Project rule</h3><p>Approved idea should become a project only if it has owner, outcome, next task, and review date.</p><div class="kv"><div>Example</div><div>Clever Cockpit</div><div>Outcome</div><div>Не терять идеи/задачи из чата</div><div>Next</div><div>Create local datastore + add Telegram capture command</div></div></div></div></div></section>
-      <section id="view-tasks" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Tasks</h3><div class="tabs"><button class="tab active">Open</button><button class="tab">Waiting</button><button class="tab">Done</button></div></div><div id="legend-tasks"></div><div id="task-list"></div></div></section>
+      <section id="view-tasks" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Tasks</h3><div class="tabs"><button class="tab active" data-task-filter="open">Open</button><button class="tab" data-task-filter="waiting">Waiting / queued</button><button class="tab" data-task-filter="done">Done</button></div></div><div id="legend-tasks"></div><div id="task-list"></div></div></section>
       <section id="view-workflow" class="view hidden">
         <div class="workflow-grid">
           <div class="card panel workflow-map">
@@ -359,6 +359,7 @@ const health = [
 ];
 
 let state = loadState();
+let taskFilter = 'open';
 const API_TOKEN = new URLSearchParams(location.search).get('token') || localStorage.getItem('clever-cockpit-token') || '';
 if (API_TOKEN) localStorage.setItem('clever-cockpit-token', API_TOKEN);
 let apiAvailable = false;
@@ -566,15 +567,27 @@ function taskRunClass(status) { return ['done'].includes(status) ? 'good' : ['fa
 function taskActionButtons(t) {
   const busy = ['queued','running'].includes(t.run_status);
   const done = t.status === 'done' || t.run_status === 'done';
-  return `<div class="item-actions"><button class="btn primary" data-action="task-run" data-id="${escapeHtml(t.id)}" ${busy || done ? 'disabled' : ''}>Run</button><button class="btn" data-action="task-schedule" data-id="${escapeHtml(t.id)}" ${busy || done ? 'disabled' : ''}>Schedule 04:30</button><button class="btn" data-action="task-done" data-id="${escapeHtml(t.id)}" ${done ? 'disabled' : ''}>Mark done</button>${t.run_status && t.run_status !== 'idle' && !done ? `<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button>` : ''}</div>`;
+  if (done) return `<div class="item-actions">${pill('closed', 'good')}${t.run_status && !['done','idle'].includes(t.run_status) ? `<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button>` : ''}</div>`;
+  return `<div class="item-actions"><button class="btn primary" data-action="task-run" data-id="${escapeHtml(t.id)}" ${busy ? 'disabled' : ''}>Run</button><button class="btn" data-action="task-schedule" data-id="${escapeHtml(t.id)}" ${busy ? 'disabled' : ''}>Schedule 04:30</button><button class="btn" data-action="task-done" data-id="${escapeHtml(t.id)}">Mark done</button>${t.run_status && t.run_status !== 'idle' ? `<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button>` : ''}</div>`;
+}
+function taskMatchesFilter(t) {
+  const run = t.run_status || 'idle';
+  if (taskFilter === 'done') return t.status === 'done' || run === 'done';
+  if (taskFilter === 'waiting') return t.status === 'waiting' || ['queued','scheduled','running','failed'].includes(run);
+  return t.status !== 'done' && t.status !== 'waiting' && !['queued','scheduled','running','failed','done'].includes(run);
+}
+function renderTaskTabs() {
+  $$('#view-tasks .tab').forEach(tab => tab.classList.toggle('active', tab.dataset.taskFilter === taskFilter));
 }
 function renderTasks() {
   const root = $('#task-list');
-  root.innerHTML = state.tasks.length ? state.tasks.map(t => {
+  renderTaskTabs();
+  const tasks = state.tasks.filter(taskMatchesFilter);
+  root.innerHTML = tasks.length ? tasks.map(t => {
     const project = projectForTask(t);
     const scheduled = t.scheduled_for ? `<span>Scheduled: ${formatTime(t.scheduled_for)}</span>` : '';
     return `<div class="item" data-task="${escapeHtml(t.id)}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="item-top"><div><div class="pill-row">${pill(t.project || 'project','blue')} ${pill(t.status || '', statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))}</div><h4>${escapeHtml(t.title)}</h4><p>${escapeHtml(t.body)}</p></div></div><div class="relation-row"><span>Project:</span>${linkedProjectButton(project, 'Open')} ${scheduled}</div>${taskActionButtons(t)}</div>`;
-  }).join('') : '<div class="empty">Nothing here yet</div>';
+  }).join('') : `<div class="empty">No ${escapeHtml(taskFilter)} tasks</div>`;
 }
 function formatTime(value) {
   if (!value) return '—';
@@ -702,6 +715,7 @@ const titles = {ideas:['Ideas','Ideas should not disappear in chat. Capture, tri
 
 $$('.nav-btn').forEach(btn => btn.onclick = () => showView(btn.dataset.view));
 $$('[data-theme-btn]').forEach(btn => btn.onclick = () => { setTheme(btn.dataset.themeBtn); renderAll(); });
+$$('[data-task-filter]').forEach(btn => btn.onclick = () => { taskFilter = btn.dataset.taskFilter || 'open'; renderTasks(); });
 $('#reset-demo').onclick = () => { if (confirm('Reset demo data?')) resetDemo().catch(err => alert(err.message)); };
 $('#new-idea').onclick = captureIdea;
 $('#review-approvals').onclick = () => showView('approvals');
