@@ -442,7 +442,7 @@ function renderLegends() {
     'legend-approvals': [['external_action', 'would affect something outside local draft state', 'blue'], ['messaging', 'would send/pin a message', 'blue'], ['urgent', 'needs prompt decision', 'bad'], ['high', 'important but not emergency', 'warn'], ['record_only', 'handler records decision only', 'blue'], ['queued', 'accepted and waiting for runner', 'warn']],
     'legend-ideas': [['converted to project/task', 'idea was accepted and follow-up objects exist', 'good'], ['closed', 'parked or intentionally not pursued now', 'warn'], ['proposed', 'captured but not triaged yet', 'blue'], ['review', 'needs a decision', 'warn'], ['approved', 'accepted for follow-up', 'good']],
     'legend-projects': [['draft', 'created but not active/confirmed yet', 'warn'], ['active', 'currently being worked', 'good'], ['maintenance', 'ongoing upkeep project', 'warn']],
-    'legend-tasks': [['open', 'ready to work', 'blue'], ['waiting', 'blocked or waiting for input/event', 'warn'], ['done', 'completed', 'good']],
+    'legend-tasks': [['manual', 'does not execute until Run is pressed', 'blue'], ['idle', 'not queued yet', 'blue'], ['queued', 'waiting for task runner', 'warn'], ['scheduled', 'will run at 04:30 MSK', 'warn'], ['running', 'runner is executing now', 'warn'], ['done', 'completed', 'good'], ['failed', 'runner failed; needs attention', 'bad'], ['waiting', 'blocked or waiting for input/event', 'warn']],
     'legend-workflow': [['draft-first', 'approved ideas become drafts before becoming active projects', 'blue']],
     'legend-health': [['good', 'healthy check', 'good'], ['warn', 'watch item / known limitation', 'warn'], ['Fresh', 'index/check is up to date', 'good'], ['Clean', 'no unsynced tooling changes', 'good'], ['200', 'HTTP endpoint responds OK', 'good']],
   };
@@ -562,11 +562,18 @@ function renderProjects() {
     return `<div class="item" data-project="${escapeHtml(p.id)}" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}"><div class="item-top"><div><div class="pill-row">${pill(p.status,'blue')} ${pill(p.status,statusClass(p.status))}</div><h4>${escapeHtml(p.title)}</h4><p>${escapeHtml(p.body)}</p></div></div><div class="relation-row">${linkedIdeaButton(idea)}<button class="link-btn" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}">Tasks: ${tasks.length}${active ? ` · active: ${escapeHtml(active.title)}` : ''}</button></div></div>`;
   }).join('') : '<div class="empty">Nothing here yet</div>';
 }
+function taskRunClass(status) { return ['done'].includes(status) ? 'good' : ['failed'].includes(status) ? 'bad' : ['queued','scheduled','running'].includes(status) ? 'warn' : 'blue'; }
+function taskActionButtons(t) {
+  const busy = ['queued','running'].includes(t.run_status);
+  const done = t.status === 'done' || t.run_status === 'done';
+  return `<div class="item-actions"><button class="btn primary" data-action="task-run" data-id="${escapeHtml(t.id)}" ${busy || done ? 'disabled' : ''}>Run</button><button class="btn" data-action="task-schedule" data-id="${escapeHtml(t.id)}" ${busy || done ? 'disabled' : ''}>Schedule 04:30</button><button class="btn" data-action="task-done" data-id="${escapeHtml(t.id)}" ${done ? 'disabled' : ''}>Mark done</button>${t.run_status && t.run_status !== 'idle' && !done ? `<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button>` : ''}</div>`;
+}
 function renderTasks() {
   const root = $('#task-list');
   root.innerHTML = state.tasks.length ? state.tasks.map(t => {
     const project = projectForTask(t);
-    return `<div class="item" data-task="${escapeHtml(t.id)}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="item-top"><div><div class="pill-row">${pill(t.project || 'project','blue')} ${pill(t.status || '', statusClass(t.status))}</div><h4>${escapeHtml(t.title)}</h4><p>${escapeHtml(t.body)}</p></div></div><div class="relation-row"><span>Project:</span>${linkedProjectButton(project, 'Open')}</div></div>`;
+    const scheduled = t.scheduled_for ? `<span>Scheduled: ${formatTime(t.scheduled_for)}</span>` : '';
+    return `<div class="item" data-task="${escapeHtml(t.id)}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="item-top"><div><div class="pill-row">${pill(t.project || 'project','blue')} ${pill(t.status || '', statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))}</div><h4>${escapeHtml(t.title)}</h4><p>${escapeHtml(t.body)}</p></div></div><div class="relation-row"><span>Project:</span>${linkedProjectButton(project, 'Open')} ${scheduled}</div>${taskActionButtons(t)}</div>`;
   }).join('') : '<div class="empty">Nothing here yet</div>';
 }
 function formatTime(value) {
@@ -632,6 +639,16 @@ async function convertIdea(id, mode) {
   }
   renderAll();
 }
+async function transitionTask(id, action) {
+  if (apiAvailable) { normalizeApiState(await api('/api/tasks/transition', { id, action })); renderAll(); return; }
+  const task = state.tasks.find(t => t.id === id);
+  if (!task) return;
+  if (action === 'run') { task.trigger = 'manual'; task.run_status = 'queued'; task.scheduled_for = null; }
+  if (action === 'schedule') { task.trigger = 'schedule'; task.run_status = 'scheduled'; task.scheduled_for = 'next 04:30 MSK'; }
+  if (action === 'reset') { task.trigger = 'manual'; task.run_status = 'idle'; task.scheduled_for = null; }
+  if (action === 'done') { task.status = 'done'; task.run_status = 'done'; task.last_run_at = new Date().toISOString(); }
+  renderAll();
+}
 async function captureIdea() {
   const title = prompt('Idea title?');
   if (!title) return;
@@ -662,13 +679,14 @@ function openProjectDrawer(id, highlightTaskId='') {
   const idea = ideaForProject(project);
   const tasks = tasksForProject(project);
   const active = highlightTaskId || (tasks.find(t => t.status === 'open') || tasks[0])?.id || '';
-  const taskList = tasks.length ? tasks.map(t => `<div class="item ${t.id === active ? 'active-task' : ''}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="pill-row">${pill(t.status, statusClass(t.status))} ${t.id === active ? pill('active task','good') : ''}</div><h4>${escapeHtml(t.title)}</h4><p>${escapeHtml(t.body)}</p><div class="relation-row"><span>Project:</span>${pill(project.title, 'blue')}</div></div>`).join('') : '<div class="empty">No linked tasks yet</div>';
+  const taskList = tasks.length ? tasks.map(t => `<div class="item ${t.id === active ? 'active-task' : ''}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="pill-row">${pill(t.status, statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))} ${t.id === active ? pill('active task','good') : ''}</div><h4>${escapeHtml(t.title)}</h4><p>${escapeHtml(t.body)}</p><div class="relation-row"><span>Project:</span>${pill(project.title, 'blue')}</div>${taskActionButtons(t)}</div>`).join('') : '<div class="empty">No linked tasks yet</div>';
   openDrawer(`${drawerHead(project.title, 'Project details + linked tasks')}<div class="pill-row">${pill(project.status, statusClass(project.status))}</div><p>${escapeHtml(project.body)}</p><div class="drawer-section"><h4>Source idea</h4><div class="relation-row">${linkedIdeaButton(idea) || '<span class="pill blue">no source idea recorded</span>'}</div></div><div class="drawer-section"><h4>Tasks linked to this project</h4>${taskList}</div>`);
 }
 function openTaskDrawer(id) {
   const task = state.tasks.find(t => t.id === id); if (!task) return;
   const project = projectForTask(task);
-  openDrawer(`${drawerHead(task.title, 'Task details')}<div class="pill-row">${pill(task.status, statusClass(task.status))}</div><p>${escapeHtml(task.body)}</p><div class="drawer-section"><h4>Project</h4><div class="relation-row">${linkedProjectButton(project)}</div></div>${project ? `<div class="drawer-section"><button class="btn primary" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}" data-task="${escapeHtml(task.id)}">Open project task list with this task highlighted</button></div>` : ''}`);
+  const runMeta = `${task.scheduled_for ? `<div>Scheduled for</div><div>${formatTime(task.scheduled_for)}</div>` : ''}${task.last_run_at ? `<div>Last run</div><div>${formatTime(task.last_run_at)}</div>` : ''}${task.last_error ? `<div>Last error</div><div>${escapeHtml(task.last_error)}</div>` : ''}`;
+  openDrawer(`${drawerHead(task.title, 'Task details')}<div class="pill-row">${pill(task.status, statusClass(task.status))} ${pill(task.trigger || 'manual','blue')} ${pill(task.run_status || 'idle', taskRunClass(task.run_status || 'idle'))}</div><p>${escapeHtml(task.body)}</p><div class="kv"><div>Trigger</div><div>${escapeHtml(task.trigger || 'manual')}</div><div>Run status</div><div>${escapeHtml(task.run_status || 'idle')}</div>${runMeta}</div><div class="drawer-section"><h4>Execution</h4>${taskActionButtons(task)}</div><div class="drawer-section"><h4>Project</h4><div class="relation-row">${linkedProjectButton(project)}</div></div>${project ? `<div class="drawer-section"><button class="btn primary" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}" data-task="${escapeHtml(task.id)}">Open project task list with this task highlighted</button></div>` : ''}`);
 }
 function showView(v) {
   $$('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -708,6 +726,10 @@ document.addEventListener('click', (event) => {
   if (action === 'open-project') openProjectDrawer(id);
   if (action === 'open-project-tasks') openProjectDrawer(id, btn.dataset.task || '');
   if (action === 'open-task') openTaskDrawer(id);
+  if (action === 'task-run') transitionTask(id, 'run').catch(err => alert(err.message));
+  if (action === 'task-schedule') transitionTask(id, 'schedule').catch(err => alert(err.message));
+  if (action === 'task-reset') transitionTask(id, 'reset').catch(err => alert(err.message));
+  if (action === 'task-done') transitionTask(id, 'done').catch(err => alert(err.message));
   if (action === 'close-drawer') closeDrawer();
 });
 refreshFromApi();

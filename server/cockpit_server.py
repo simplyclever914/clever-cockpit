@@ -8,7 +8,7 @@ import re
 import secrets
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -133,8 +133,8 @@ def connect() -> sqlite3.Connection:
 
 
 def migrate(conn: sqlite3.Connection) -> None:
-    columns = {row[1] for row in conn.execute("pragma table_info(approvals)")}
-    migrations = {
+    approval_columns = {row[1] for row in conn.execute("pragma table_info(approvals)")}
+    approval_migrations = {
         "run_status": "alter table approvals add column run_status text",
         "handler": "alter table approvals add column handler text",
         "payload_json": "alter table approvals add column payload_json text",
@@ -142,8 +142,19 @@ def migrate(conn: sqlite3.Connection) -> None:
         "completed_at": "alter table approvals add column completed_at text",
         "last_error": "alter table approvals add column last_error text",
     }
-    for column, sql in migrations.items():
-        if column not in columns:
+    for column, sql in approval_migrations.items():
+        if column not in approval_columns:
+            conn.execute(sql)
+    task_columns = {row[1] for row in conn.execute("pragma table_info(tasks)")}
+    task_migrations = {
+        "trigger": "alter table tasks add column trigger text not null default 'manual'",
+        "run_status": "alter table tasks add column run_status text not null default 'idle'",
+        "scheduled_for": "alter table tasks add column scheduled_for text",
+        "last_run_at": "alter table tasks add column last_run_at text",
+        "last_error": "alter table tasks add column last_error text",
+    }
+    for column, sql in task_migrations.items():
+        if column not in task_columns:
             conn.execute(sql)
     conn.commit()
 
@@ -157,7 +168,7 @@ def seed(conn: sqlite3.Connection, force: bool = False) -> None:
     conn.executemany("insert or ignore into approvals(id,title,kind,priority,body,status,handler,payload_json,created_at,updated_at) values (?,?,?,?,?,?,?,?,?,?)", [(a,b,c,d,e,"pending","record_only",json.dumps({"note": e}, ensure_ascii=False),t,t) for a,b,c,d,e in SEED["approvals"]])
     conn.executemany("insert or ignore into ideas values (?,?,?,?,?,?,?)", [(a,b,c,d,e,t,t) for a,b,c,d,e in SEED["ideas"]])
     conn.executemany("insert or ignore into projects values (?,?,?,?,?,?,?)", [(a,b,c,d,e,t,t) for a,b,c,d,e in SEED["projects"]])
-    conn.executemany("insert or ignore into tasks values (?,?,?,?,?,?,?,?)", [(a,b,c,d,e,f,t,t) for a,b,c,d,e,f in SEED["tasks"]])
+    conn.executemany("insert or ignore into tasks(id,title,project,status,body,source_idea_id,created_at,updated_at) values (?,?,?,?,?,?,?,?)", [(a,b,c,d,e,f,t,t) for a,b,c,d,e,f in SEED["tasks"]])
     conn.executemany("insert into activity(title,kind,status,priority,body,created_at) values (?,?,?,?,?,?)", [(a,b,c,d,e,t) for a,b,c,d,e in SEED["activity"]])
     conn.commit()
 
@@ -167,6 +178,44 @@ def rows(conn: sqlite3.Connection, table: str, where: str = "", args: tuple = ()
     if table == "ideas":
         order = "updated_at desc"
     return [dict(r) for r in conn.execute(f"select * from {table} {where} order by {order}", args)]
+
+
+def next_msk_0430() -> str:
+    # Europe/Moscow is UTC+3 without DST at the moment; store as UTC ISO for simple comparisons.
+    msk = timezone(timedelta(hours=3))
+    dt = datetime.now(msk)
+    target = dt.replace(hour=4, minute=30, second=0, microsecond=0)
+    if dt >= target:
+        target += timedelta(days=1)
+    return target.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def transition_task(conn: sqlite3.Connection, task_id: str, action: str) -> dict | None:
+    task = conn.execute("select * from tasks where id=?", (task_id,)).fetchone()
+    if not task:
+        return None
+    t = now()
+    if action == "run":
+        conn.execute("update tasks set trigger='manual', run_status='queued', scheduled_for=null, last_error=null, updated_at=? where id=?", (t, task_id))
+        add_activity(conn, f"Task queued: {task['title']}", task["body"], "Task", "queued", "high")
+    elif action == "schedule":
+        scheduled_for = next_msk_0430()
+        conn.execute("update tasks set trigger='schedule', run_status='scheduled', scheduled_for=?, last_error=null, updated_at=? where id=?", (scheduled_for, t, task_id))
+        add_activity(conn, f"Task scheduled: {task['title']}", f"Scheduled for next 04:30 MSK ({scheduled_for}).", "Task", "scheduled", "normal")
+    elif action == "reset":
+        conn.execute("update tasks set trigger='manual', run_status='idle', scheduled_for=null, last_error=null, updated_at=? where id=?", (t, task_id))
+        add_activity(conn, f"Task reset: {task['title']}", task["body"], "Task", "open", "normal")
+    elif action == "done":
+        conn.execute("update tasks set status='done', run_status='done', last_run_at=?, last_error=null, updated_at=? where id=?", (t, t, task_id))
+        add_activity(conn, f"Task completed: {task['title']}", task["body"], "Task", "done", "normal")
+    elif action == "waiting":
+        conn.execute("update tasks set status='waiting', run_status='idle', last_error=?, updated_at=? where id=?", ("Waiting/blocker set from UI", t, task_id))
+        add_activity(conn, f"Task waiting: {task['title']}", "Waiting/blocker set from UI", "Task", "waiting", "warn")
+    else:
+        raise ValueError("action must be run, schedule, reset, done, or waiting")
+    conn.commit()
+    updated = conn.execute("select * from tasks where id=?", (task_id,)).fetchone()
+    return dict(updated) if updated else None
 
 
 def read_json_file(path: Path, default: object) -> object:
@@ -461,9 +510,15 @@ class Handler(SimpleHTTPRequestHandler):
                         task_id = f"{project_id}-next"
                         conn.execute("insert or ignore into projects values (?,?,?,?,?,?,?)", (project_id, idea["title"], "draft", "Draft project created from approved idea. Confirm before making active.", idea_id, t, t))
                         task_title = f"Implement: {idea['title']}" if action == "task" else f"Define next step: {idea['title']}"
-                        conn.execute("insert or ignore into tasks values (?,?,?,?,?,?,?,?)", (task_id, task_title, idea["title"], "open", "Created from approved idea.", idea_id, t, t))
-                        add_activity(conn, f"Converted idea: {idea['title']}", "Created draft project/task follow-up.", "Idea", "approved", "high")
+                        conn.execute("insert or ignore into tasks(id,title,project,status,body,source_idea_id,created_at,updated_at,trigger,run_status) values (?,?,?,?,?,?,?,?,?,?)", (task_id, task_title, idea["title"], "open", "Created from approved idea. Trigger defaults to manual; press Run to queue execution or Schedule for 04:30 MSK.", idea_id, t, t, "manual", "idle"))
+                        add_activity(conn, f"Converted idea: {idea['title']}", "Created draft project/task follow-up with manual trigger.", "Idea", "approved", "high")
                     conn.commit()
+                elif parsed.path == "/api/tasks/transition":
+                    task_id = data["id"]
+                    action = data.get("action", "run")
+                    updated = transition_task(conn, task_id, action)
+                    if not updated:
+                        self.send_json({"error": "task not found"}, 404); return
                 else:
                     self.send_json({"error": "not found"}, 404); return
                 self.send_json(state(conn))
