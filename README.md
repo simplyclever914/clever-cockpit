@@ -48,11 +48,14 @@ python3 scripts/approval_runner.py --base-url http://127.0.0.1:8765 --interval 1
 Create a typed approval from a workflow:
 
 ```bash
-curl -H "Authorization: Bearer $(cat data/token)" \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"Send digest","handler":"telegram_send_and_pin_digest","payload":{"job_key":"ai_wrapup","text_file":"/tmp/digest.txt"}}' \
-  http://127.0.0.1:8765/api/approvals
+scripts/create-cockpit-approval.py \
+  --title "Send digest" \
+  --handler telegram_send_and_pin_digest \
+  --job-key ai_wrapup \
+  --text-file /tmp/digest.txt
 ```
+
+For a generated AI wrap-up, use `digest_publish_and_send` so SourceCraft publish and Telegram send/pin happen together after one OK.
 
 
 ## Validate

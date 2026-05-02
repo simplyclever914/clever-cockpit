@@ -52,10 +52,17 @@ RUNNER_MARKERS = [
     'record_only',
     'telegram_send_and_pin_digest',
     'sourcecraft_publish',
+    'digest_publish_and_send',
     '/api/approvals/ready',
     '/api/approvals/complete',
     'needs_handler',
     'resolve_path',
+]
+CREATE_APPROVAL_MARKERS = [
+    '/api/approvals',
+    'digest_publish_and_send',
+    'telegram_send_and_pin_digest',
+    'approval_created',
 ]
 FORBIDDEN_MARKERS = [
     'data-view="architecture"',
@@ -91,7 +98,11 @@ def main() -> int:
     for marker in RUNNER_MARKERS:
         if marker not in runner_text:
             errors.append(f'missing runner marker: {marker}')
-    py_compile = subprocess.run([sys.executable, '-m', 'py_compile', str(ROOT / 'server' / 'cockpit_server.py'), str(ROOT / 'scripts' / 'approval_runner.py')], cwd=ROOT, text=True, capture_output=True)
+    create_approval_text = (ROOT / 'scripts' / 'create-cockpit-approval.py').read_text(encoding='utf-8')
+    for marker in CREATE_APPROVAL_MARKERS:
+        if marker not in create_approval_text:
+            errors.append(f'missing create approval marker: {marker}')
+    py_compile = subprocess.run([sys.executable, '-m', 'py_compile', str(ROOT / 'server' / 'cockpit_server.py'), str(ROOT / 'scripts' / 'approval_runner.py'), str(ROOT / 'scripts' / 'create-cockpit-approval.py')], cwd=ROOT, text=True, capture_output=True)
     if py_compile.returncode != 0:
         errors.append('server py_compile failed:\n' + (py_compile.stderr.strip() or py_compile.stdout.strip()))
 

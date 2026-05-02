@@ -97,16 +97,14 @@ def handle_record_only(approval: dict, payload: dict) -> str:
 
 
 def handle_telegram_send_and_pin_digest(_approval: dict, payload: dict) -> str:
-    job_key = str(payload.get("job_key") or "").strip()
-    text_file = resolve_path(str(payload.get("text_file") or ""), allow_tmp=True)
-    if job_key not in {"reflection", "ai_wrapup", "telegram_radar"}:
-        raise HandlerError("job_key must be one of reflection, ai_wrapup, telegram_radar")
-    if not TELEGRAM_SEND_AND_PIN.exists():
-        raise HandlerError(f"send-and-pin script not found: {TELEGRAM_SEND_AND_PIN}")
-    return run_checked(["node", str(TELEGRAM_SEND_AND_PIN), job_key, str(text_file)], cwd=WORKSPACE, timeout=120)
+    return send_and_pin_digest(payload)
 
 
 def handle_sourcecraft_publish(_approval: dict, payload: dict) -> str:
+    return publish_sourcecraft(payload)
+
+
+def publish_sourcecraft(payload: dict) -> str:
     source = resolve_path(str(payload.get("source") or ""), allow_tmp=False)
     slug = str(payload.get("slug") or "").strip()
     if not slug:
@@ -123,10 +121,27 @@ def handle_sourcecraft_publish(_approval: dict, payload: dict) -> str:
     return run_checked(cmd, cwd=WORKSPACE, env=env, timeout=300)
 
 
+def send_and_pin_digest(payload: dict) -> str:
+    job_key = str(payload.get("job_key") or "").strip()
+    text_file = resolve_path(str(payload.get("text_file") or ""), allow_tmp=True)
+    if job_key not in {"reflection", "ai_wrapup", "telegram_radar"}:
+        raise HandlerError("job_key must be one of reflection, ai_wrapup, telegram_radar")
+    if not TELEGRAM_SEND_AND_PIN.exists():
+        raise HandlerError(f"send-and-pin script not found: {TELEGRAM_SEND_AND_PIN}")
+    return run_checked(["node", str(TELEGRAM_SEND_AND_PIN), job_key, str(text_file)], cwd=WORKSPACE, timeout=120)
+
+
+def handle_digest_publish_and_send(_approval: dict, payload: dict) -> str:
+    publish_out = publish_sourcecraft(payload)
+    send_out = send_and_pin_digest(payload)
+    return f"publish: {publish_out}\nsend: {send_out}"
+
+
 HANDLERS: dict[str, Callable[[dict, dict], str]] = {
     "record_only": handle_record_only,
     "telegram_send_and_pin_digest": handle_telegram_send_and_pin_digest,
     "sourcecraft_publish": handle_sourcecraft_publish,
+    "digest_publish_and_send": handle_digest_publish_and_send,
 }
 
 
