@@ -138,13 +138,27 @@
     .node.agent { border-color:color-mix(in srgb,var(--warn) 40%,transparent); }
     .node.store { border-color:color-mix(in srgb,var(--good) 38%,transparent); }
     .node.ui { border-color:color-mix(in srgb,var(--accent2) 40%,transparent); }
+    .workflow-grid { display:grid; grid-template-columns: 1.1fr .9fr; gap:16px; }
+    .workflow-map { min-height:680px; position:relative; overflow:auto; }
+    .workflow-map svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+    .wf-node { position:absolute; width:190px; padding:13px; border-radius:18px; border:1px solid var(--border2); background:var(--glass); box-shadow:0 10px 40px rgba(0,0,0,.18); }
+    .wf-node b { display:block; margin-bottom:5px; }
+    .wf-node small { display:block; color:var(--soft); line-height:1.35; }
+    .wf-node.idea { border-color:color-mix(in srgb,var(--blue) 40%,transparent); }
+    .wf-node.decision { border-color:color-mix(in srgb,var(--warn) 45%,transparent); }
+    .wf-node.project { border-color:color-mix(in srgb,var(--accent2) 45%,transparent); }
+    .wf-node.task { border-color:color-mix(in srgb,var(--good) 42%,transparent); }
+    .wf-node.approval { border-color:color-mix(in srgb,var(--bad) 40%,transparent); }
+    .wf-node.feedback { border-color:color-mix(in srgb,var(--soft) 45%,transparent); }
+    .rule-list { display:grid; gap:10px; }
+    .rule-list .item h4 { margin-bottom:4px; }
     .hidden { display:none !important; }
     @media (max-width: 980px) {
       body { overflow:auto; }
       .app { grid-template-columns:1fr; height:auto; }
       aside { position:sticky; top:0; z-index:5; max-height:42vh; }
       main { padding:18px; }
-      .stats, .content-grid, .kanban { grid-template-columns:1fr; }
+      .stats, .content-grid, .kanban, .workflow-grid { grid-template-columns:1fr; }
       .detail { position:static; }
     }
   </style>
@@ -159,6 +173,7 @@
         <button class="nav-btn active" data-view="ideas">💡 Ideas <span class="badge">8</span></button>
         <button class="nav-btn" data-view="projects">🧩 Projects <span class="badge">4</span></button>
         <button class="nav-btn" data-view="tasks">✅ Tasks <span class="badge">9</span></button>
+        <button class="nav-btn" data-view="workflow">🗺 Workflow</button>
         <button class="nav-btn" data-view="inbox">📥 Inbox <span class="badge">5</span></button>
         <button class="nav-btn" data-view="artifacts">🗂 Artifacts</button>
         <div class="nav-section">System</div>
@@ -217,6 +232,42 @@
       </section>
       <section id="view-projects" class="view hidden"><div class="grid content-grid"><div class="card panel"><div class="panel-head"><h3>Projects from approved ideas</h3><button class="btn primary">+ New project</button></div><div id="project-list"></div></div><div class="card panel detail"><div class="preview"><h3>Project rule</h3><p>Approved idea should become a project only if it has owner, outcome, next task, and review date.</p><div class="kv"><div>Example</div><div>Clever Cockpit</div><div>Outcome</div><div>Не терять идеи/задачи из чата</div><div>Next</div><div>Create local datastore + add Telegram capture command</div></div></div></div></div></section>
       <section id="view-tasks" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Tasks</h3><div class="tabs"><button class="tab active">Open</button><button class="tab">Waiting</button><button class="tab">Done</button></div></div><div id="task-list"></div></div></section>
+      <section id="view-workflow" class="view hidden">
+        <div class="workflow-grid">
+          <div class="card panel workflow-map">
+            <div class="panel-head"><h3>Idea → Project → Task lifecycle</h3><span class="pill blue">draft-first</span></div>
+            <svg viewBox="0 0 760 640" preserveAspectRatio="none" aria-hidden="true">
+              <defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="rgba(148,163,184,.75)" /></marker></defs>
+              <path d="M145 120 C230 120 250 120 330 120" stroke="rgba(148,163,184,.75)" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+              <path d="M430 125 C520 125 535 125 620 125" stroke="rgba(148,163,184,.75)" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+              <path d="M660 190 C660 245 660 260 660 315" stroke="rgba(148,163,184,.75)" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+              <path d="M595 380 C500 420 425 430 330 430" stroke="rgba(148,163,184,.75)" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+              <path d="M235 430 C165 410 125 355 125 285" stroke="rgba(148,163,184,.45)" stroke-width="2" fill="none" marker-end="url(#arrow)" stroke-dasharray="6 7"/>
+              <path d="M330 165 C270 225 220 240 170 240" stroke="rgba(148,163,184,.55)" stroke-width="2" fill="none" marker-end="url(#arrow)" stroke-dasharray="6 7"/>
+              <path d="M660 380 C660 470 585 525 445 525" stroke="rgba(148,163,184,.45)" stroke-width="2" fill="none" marker-end="url(#arrow)" stroke-dasharray="6 7"/>
+            </svg>
+            <div class="wf-node idea" style="left:26px;top:76px"><b>1. Captured idea</b><small>“Это интересно”, `/idea`, manual capture, or Clever notices a useful opportunity.</small></div>
+            <div class="wf-node decision" style="left:298px;top:76px"><b>2. Decision gate</b><small>Clarify value, risk, owner, next step. Outcome: park, make task, or create draft project.</small></div>
+            <div class="wf-node project" style="left:548px;top:76px"><b>3. Draft project</b><small>Approved idea becomes a draft project with outcome + first task. Not active until confirmed.</small></div>
+            <div class="wf-node task" style="left:548px;top:318px"><b>4. Tasks</b><small>Concrete next actions. Tasks can come from a project or directly from a small approved idea.</small></div>
+            <div class="wf-node approval" style="left:92px;top:238px"><b>Approval checkpoint</b><small>External, sensitive, costly, or public actions pause here for OK/Deny.</small></div>
+            <div class="wf-node feedback" style="left:235px;top:410px"><b>5. Run/result</b><small>Work produces activity, artifacts, learnings, blocked states, or follow-up ideas.</small></div>
+            <div class="wf-node idea" style="left:365px;top:506px"><b>Feedback loop</b><small>Results can spawn new ideas, update the project, or close tasks. Nothing should disappear in chat.</small></div>
+          </div>
+          <div class="card panel detail">
+            <div class="preview">
+              <h3>Working rules</h3>
+              <div class="rule-list">
+                <div class="item"><h4>Idea ≠ commitment</h4><p>Идея — это captured signal. Она ждёт решения: развивать, превратить в маленькую задачу, отложить или закрыть.</p></div>
+                <div class="item"><h4>Approved idea → draft project</h4><p>OK по идее создаёт draft project + first task. Активным проект становится только после подтверждения outcome/приоритета.</p></div>
+                <div class="item"><h4>Task = next action</h4><p>Задача должна быть исполнимой: один понятный шаг, статус, привязка к проекту или source idea.</p></div>
+                <div class="item"><h4>Approvals are execution gates</h4><p>OK/Deny в Approvals не “просто заметка”: runner забирает approved action и выполняет только allowlisted handler.</p></div>
+                <div class="item"><h4>Activity closes the loop</h4><p>Каждый запуск, публикация, ошибка или результат попадает в activity и может породить новую идею/таск.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
       <section id="view-health" class="view hidden"><div class="grid stats"><div class="card stat"><span>Telegram index</span><b style="color:var(--good)">Fresh</b></div><div class="card stat"><span>GitHub tools</span><b style="color:var(--good)">Clean</b></div><div class="card stat"><span>SourceCraft</span><b style="color:var(--good)">200</b></div><div class="card stat"><span>Failed jobs</span><b style="color:var(--warn)">0</b></div></div><div class="card panel"><h3>Health checks</h3><div id="health-list"></div></div></section>
     </main>
   </div>
@@ -478,7 +529,7 @@ function showView(v) {
   $('#view-desc').textContent = titles[v][1];
 }
 
-const titles = {ideas:['Ideas','Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.'],projects:['Projects','Approved ideas grouped into outcomes with owners, next tasks, and review dates.'],tasks:['Tasks','Concrete next actions created from ideas, projects, digests, and operational work.'],inbox:['Inbox','Attention feed: approvals, failures, useful finds, and reminders.'],approvals:['Approvals','Human-in-the-loop queue with OK/Deny buttons for external, destructive, expensive, or sensitive actions.'],artifacts:['Artifacts','Digest drafts, SourceCraft pages, generated reports, scripts, and compareable outputs.'],runs:['Runs','Cron jobs, subagents, background commands, last success and logs.'],health:['Health','Freshness checks, sync state, publish checks, and operational risks.']};
+const titles = {ideas:['Ideas','Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.'],projects:['Projects','Approved ideas grouped into outcomes with owners, next tasks, and review dates.'],tasks:['Tasks','Concrete next actions created from ideas, projects, digests, and operational work.'],workflow:['Workflow','The lifecycle that connects ideas, decisions, draft projects, tasks, approvals, and activity feedback.'],inbox:['Inbox','Attention feed: approvals, failures, useful finds, and reminders.'],approvals:['Approvals','Human-in-the-loop queue with OK/Deny buttons for external, destructive, expensive, or sensitive actions.'],artifacts:['Artifacts','Digest drafts, SourceCraft pages, generated reports, scripts, and compareable outputs.'],runs:['Runs','Cron jobs, subagents, background commands, last success and logs.'],health:['Health','Freshness checks, sync state, publish checks, and operational risks.']};
 
 $$('.nav-btn').forEach(btn => btn.onclick = () => showView(btn.dataset.view));
 $$('[data-theme-btn]').forEach(btn => btn.onclick = () => { state.theme = btn.dataset.themeBtn; renderAll(); });
