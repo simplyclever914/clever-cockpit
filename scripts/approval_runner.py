@@ -9,6 +9,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import sqlite3
 from pathlib import Path
 from typing import Callable
 
@@ -18,6 +19,7 @@ TOKEN_FILE = ROOT / "data" / "token"
 SOURCECRAFT_ENV = WORKSPACE / "skills" / "sourcecraft-publisher" / "config" / ".env"
 SOURCECRAFT_PUBLISHER = WORKSPACE / "skills" / "sourcecraft-publisher" / "scripts" / "publish_static.py"
 TELEGRAM_SEND_AND_PIN = WORKSPACE / "scripts" / "telegram-send-and-pin-digest.mjs"
+DB_PATH = Path(os.environ.get("CLEVER_COCKPIT_DB", ROOT / "data" / "cockpit.sqlite"))
 
 
 class HandlerError(Exception):
@@ -96,6 +98,28 @@ def handle_record_only(approval: dict, payload: dict) -> str:
     return str(payload.get("note") or f"Approval recorded: {approval.get('title', approval.get('id'))}")
 
 
+def handle_idea_review(_approval: dict, payload: dict) -> str:
+    idea_id = str(payload.get("idea_id") or "").strip()
+    if not idea_id:
+        raise HandlerError("idea_id is required")
+    target_status = str(payload.get("target_status") or "review").strip()
+    if target_status not in {"review", "approved", "done"}:
+        raise HandlerError("target_status must be review, approved, or done")
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        idea = conn.execute("select * from ideas where id=?", (idea_id,)).fetchone()
+        if not idea:
+            raise HandlerError(f"idea not found: {idea_id}")
+        t = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
+        conn.execute("update ideas set status=?, updated_at=? where id=?", (target_status, t, idea_id))
+        conn.execute(
+            "insert into activity(title,kind,status,priority,body,created_at) values (?,?,?,?,?,?)",
+            (f"Idea review accepted: {idea['title']}", "Idea", target_status, "normal", idea["body"], t),
+        )
+        conn.commit()
+    return f"Idea {idea_id} moved to {target_status}"
+
+
 def handle_telegram_send_and_pin_digest(_approval: dict, payload: dict) -> str:
     return send_and_pin_digest(payload)
 
@@ -139,6 +163,7 @@ def handle_digest_publish_and_send(_approval: dict, payload: dict) -> str:
 
 HANDLERS: dict[str, Callable[[dict, dict], str]] = {
     "record_only": handle_record_only,
+    "idea_review": handle_idea_review,
     "telegram_send_and_pin_digest": handle_telegram_send_and_pin_digest,
     "sourcecraft_publish": handle_sourcecraft_publish,
     "digest_publish_and_send": handle_digest_publish_and_send,

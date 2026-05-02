@@ -50,8 +50,8 @@ def main() -> int:
             'kind': 'idea_review',
             'priority': args.priority,
             'body': f'{args.body}\n\nIdea id: {idea_id}'.strip(),
-            'handler': 'record_only',
-            'payload': {'note': f'Idea review acknowledged: {idea_id}', 'idea_id': idea_id},
+            'handler': 'idea_review',
+            'payload': {'note': f'Idea review acknowledged: {idea_id}', 'idea_id': idea_id, 'target_status': 'review'},
         }
         approval_result = post(args.base_url, token, '/api/approvals', approval)
         item = approval_result.get('approval', {})

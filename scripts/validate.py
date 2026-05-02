@@ -59,6 +59,7 @@ RUNNER_MARKERS = [
     'handle_approval',
     'HANDLERS',
     'record_only',
+    'idea_review',
     'telegram_send_and_pin_digest',
     'sourcecraft_publish',
     'digest_publish_and_send',
@@ -77,6 +78,7 @@ CREATE_IDEA_MARKERS = [
     '/api/ideas',
     '--approval',
     'idea_created',
+    'idea_review',
     'approval_created',
 ]
 FORBIDDEN_MARKERS = [
