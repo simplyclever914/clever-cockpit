@@ -100,3 +100,13 @@ The cockpit SHALL expose Activity as a first-class view so the workflow feedback
 - **THEN** the cockpit SHALL show chronological activity entries and a detail panel
 - **AND** Inbox SHALL remain a separate attention/triage concept
 
+### Requirement: Theme persistence
+
+The cockpit SHALL preserve the selected theme across page reloads, including when API-backed state is loaded.
+
+#### Scenario: Light theme persists after reload
+
+- **GIVEN** the user selects the light theme
+- **WHEN** the page reloads and fetches API state
+- **THEN** the document theme SHALL remain light
+

@@ -287,6 +287,7 @@
 
 <script>
 const STORAGE_KEY = 'clever-cockpit:v2';
+const THEME_KEY = 'clever-cockpit-theme';
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
@@ -356,12 +357,16 @@ async function api(path, data) {
   if (!res.ok) throw new Error(`API ${res.status}`);
   return res.json();
 }
+function currentTheme() { return localStorage.getItem(THEME_KEY) || state.theme || 'dark'; }
+function setTheme(theme) { state.theme = theme || 'dark'; localStorage.setItem(THEME_KEY, state.theme); saveState(); }
 function normalizeApiState(data) {
+  const theme = currentTheme();
   state.approvals = data.approvals || [];
   state.ideas = data.ideas || [];
   state.projects = data.projects || [];
   state.tasks = data.tasks || [];
   state.activity = data.activity || [];
+  state.theme = theme;
 }
 async function refreshFromApi() {
   try {
@@ -374,7 +379,9 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return seedState();
     const parsed = JSON.parse(raw);
-    return parsed && parsed.ideas && parsed.approvals ? parsed : seedState();
+    const loaded = parsed && parsed.ideas && parsed.approvals ? parsed : seedState();
+    loaded.theme = localStorage.getItem(THEME_KEY) || loaded.theme || 'dark';
+    return loaded;
   } catch { return seedState(); }
 }
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
@@ -503,7 +510,7 @@ function renderStaticLists() {
   simpleList('health-list', health, 'health');
 }
 function renderAll() {
-  document.documentElement.dataset.theme = state.theme || 'dark';
+  document.documentElement.dataset.theme = currentTheme();
   renderCounts(); renderActivity(); renderApprovals(); renderIdeas(); renderProjects(); renderTasks(); renderStaticLists();
   if (!apiAvailable) saveState();
 }
@@ -562,7 +569,7 @@ function showView(v) {
 const titles = {ideas:['Ideas','Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.'],projects:['Projects','Approved ideas grouped into outcomes with owners, next tasks, and review dates.'],tasks:['Tasks','Concrete next actions created from ideas, projects, digests, and operational work.'],workflow:['Workflow','The lifecycle that connects ideas, decisions, draft projects, tasks, approvals, schedules, and activity feedback.'],activity:['Activity','Chronological event log: runs, approvals, idea transitions, publications, errors, and outcomes.'],inbox:['Inbox','Attention feed: approvals, failures, useful finds, and reminders.'],approvals:['Approvals','Human-in-the-loop queue with OK/Deny buttons for external, destructive, expensive, or sensitive actions.'],artifacts:['Artifacts','Digest drafts, SourceCraft pages, generated reports, scripts, and compareable outputs.'],runs:['Runs','Cron jobs, subagents, background commands, last success and logs.'],health:['Health','Freshness checks, sync state, publish checks, and operational risks.']};
 
 $$('.nav-btn').forEach(btn => btn.onclick = () => showView(btn.dataset.view));
-$$('[data-theme-btn]').forEach(btn => btn.onclick = () => { state.theme = btn.dataset.themeBtn; renderAll(); });
+$$('[data-theme-btn]').forEach(btn => btn.onclick = () => { setTheme(btn.dataset.themeBtn); renderAll(); });
 $('#reset-demo').onclick = () => { if (confirm('Reset demo data?')) resetDemo().catch(err => alert(err.message)); };
 $('#new-idea').onclick = captureIdea;
 $('#review-approvals').onclick = () => showView('approvals');
