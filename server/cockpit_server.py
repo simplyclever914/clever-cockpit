@@ -366,6 +366,84 @@ def create_approval(conn: sqlite3.Connection, data: dict) -> dict:
     return dict(row)
 
 
+TASK_DESCRIPTION_ERROR = "task description must include Outcome:, Scope:, and Done when: sections with concrete detail"
+
+
+def validate_task_description(body: str) -> None:
+    normalized = re.sub(r"\s+", " ", body.strip()).lower()
+    generic = {"", "todo", "tbd", "fix", "fix stuff", "do it", "later", "placeholder", "next step"}
+    if normalized in generic or len(normalized) < 80:
+        raise ValueError(TASK_DESCRIPTION_ERROR)
+    required_sections = ("outcome:", "scope:", "done when:")
+    if not all(section in normalized for section in required_sections):
+        raise ValueError(TASK_DESCRIPTION_ERROR)
+    for section in required_sections:
+        after = normalized.split(section, 1)[1].strip()
+        if not after or after.split(" ", 5)[0] in generic:
+            raise ValueError(TASK_DESCRIPTION_ERROR)
+
+
+def create_task(conn: sqlite3.Connection, data: dict) -> dict:
+    title = (data.get("title") or "").strip()
+    if not title:
+        raise ValueError("title required")
+    body = (data.get("body") or data.get("description") or "").strip()
+    validate_task_description(body)
+    task_id = (data.get("id") or f"{slugify(title)}-{secrets.token_hex(3)}").strip()
+    project = (data.get("project") or "Inbox").strip() or "Inbox"
+    status = (data.get("status") or "open").strip() or "open"
+    if status not in {"open", "waiting", "scheduled", "done"}:
+        raise ValueError("status must be open, waiting, scheduled, or done")
+    trigger = (data.get("trigger") or "manual").strip() or "manual"
+    run_status = (data.get("run_status") or "idle").strip() or "idle"
+    source_idea_id = data.get("source_idea_id")
+    t = now()
+    conn.execute(
+        """
+        insert into tasks(id,title,project,status,body,source_idea_id,created_at,updated_at,trigger,run_status)
+        values (?,?,?,?,?,?,?,?,?,?)
+        """,
+        (task_id, title, project, status, body, source_idea_id, t, t, trigger, run_status),
+    )
+    add_activity(conn, f"Task created: {title}", body, "Task", status)
+    conn.commit()
+    row = conn.execute("select * from tasks where id=?", (task_id,)).fetchone()
+    return dict(row)
+
+
+def update_task(conn: sqlite3.Connection, data: dict) -> dict | None:
+    task_id = (data.get("id") or "").strip()
+    if not task_id:
+        raise ValueError("id required")
+    row = conn.execute("select * from tasks where id=?", (task_id,)).fetchone()
+    if not row:
+        return None
+    title = (data.get("title") if data.get("title") is not None else row["title"]).strip()
+    if not title:
+        raise ValueError("title required")
+    body = (data.get("body") if data.get("body") is not None else row["body"]).strip()
+    validate_task_description(body)
+    status = (data.get("status") if data.get("status") is not None else row["status"]).strip() or "open"
+    if status not in {"open", "waiting", "scheduled", "done"}:
+        raise ValueError("status must be open, waiting, scheduled, or done")
+    t = now()
+    run_status = row["run_status"]
+    last_run_at = row["last_run_at"]
+    if status == "done" and run_status != "done":
+        run_status = "done"
+        last_run_at = t
+    elif status in {"open", "waiting"} and run_status in {"queued", "scheduled", "running", "done"}:
+        run_status = "idle"
+    conn.execute(
+        "update tasks set title=?, body=?, status=?, run_status=?, last_run_at=?, last_error=null, updated_at=? where id=?",
+        (title, body, status, run_status, last_run_at, t, task_id),
+    )
+    add_activity(conn, f"Task edited: {title}", "Updated task title, description, or status from Cockpit UI.", "Task", status)
+    conn.commit()
+    updated = conn.execute("select * from tasks where id=?", (task_id,)).fetchone()
+    return dict(updated) if updated else None
+
+
 def ensure_token() -> str:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     env = os.environ.get("CLEVER_COCKPIT_TOKEN")
@@ -511,9 +589,26 @@ class Handler(SimpleHTTPRequestHandler):
                         conn.execute("insert or ignore into projects values (?,?,?,?,?,?,?)", (project_id, idea["title"], "draft", "Draft project created from approved idea. Confirm before making active.", idea_id, t, t))
                         task_title = f"Implement: {idea['title']}" if action == "task" else f"Define next step: {idea['title']}"
                         task_body = "Outcome: turn the approved idea into one clear next action. Scope: clarify owner, expected artifact, and done criteria before running. Done when: the project/task relationship is explicit and the next execution step is unambiguous. Trigger defaults to manual; press Run to queue execution or Schedule for 04:30 MSK."
-                        conn.execute("insert or ignore into tasks(id,title,project,status,body,source_idea_id,created_at,updated_at,trigger,run_status) values (?,?,?,?,?,?,?,?,?,?)", (task_id, task_title, idea["title"], "open", task_body, idea_id, t, t, "manual", "idle"))
+                        if not conn.execute("select 1 from tasks where id=?", (task_id,)).fetchone():
+                            create_task(conn, {"id": task_id, "title": task_title, "project": idea["title"], "status": "open", "body": task_body, "source_idea_id": idea_id, "trigger": "manual", "run_status": "idle"})
                         add_activity(conn, f"Converted idea: {idea['title']}", "Created draft project/task follow-up with manual trigger.", "Idea", "approved", "high")
                     conn.commit()
+                elif parsed.path == "/api/tasks":
+                    try:
+                        task = create_task(conn, data)
+                    except ValueError as exc:
+                        self.send_json({"error": str(exc)}, 400); return
+                    self.send_json({"task": task, "state": state(conn)}, 201)
+                    return
+                elif parsed.path == "/api/tasks/update":
+                    try:
+                        task = update_task(conn, data)
+                    except ValueError as exc:
+                        self.send_json({"error": str(exc)}, 400); return
+                    if not task:
+                        self.send_json({"error": "task not found"}, 404); return
+                    self.send_json({"task": task, "state": state(conn)})
+                    return
                 elif parsed.path == "/api/tasks/transition":
                     task_id = data["id"]
                     action = data.get("action", "run")

@@ -58,7 +58,7 @@
         linear-gradient(135deg, var(--bg), var(--bg2));
       overflow: hidden;
     }
-    button, input { font: inherit; color: inherit; }
+    button, input, textarea, select { font: inherit; color: inherit; }
     .app { display: grid; grid-template-columns: 280px 1fr; height: 100vh; }
     aside {
       padding: 18px 14px;
@@ -118,6 +118,9 @@
     .task-description summary { cursor:pointer; color:var(--soft); font-size:12px; user-select:none; }
     .task-description[open] summary { margin-bottom:6px; }
     .task-description p { margin:6px 0 0; }
+    .task-blocker { margin-top:10px; border:1px solid color-mix(in srgb,var(--bad) 34%,transparent); background:color-mix(in srgb,var(--bad) 10%,transparent); color:#fecdd3; border-radius:14px; padding:8px 10px; font-size:12px; line-height:1.4; }
+    [data-theme="light"] .task-blocker { color:#be123c; }
+    .task-blocker b { color:var(--bad); }
     .item-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
     .link-btn { border:1px solid var(--border2); border-radius:999px; background:color-mix(in srgb,var(--blue) 9%, transparent); color:var(--blue); padding:5px 9px; cursor:pointer; font-size:12px; }
     .link-btn:hover { border-color:color-mix(in srgb,var(--blue) 45%, transparent); background:color-mix(in srgb,var(--blue) 15%, transparent); }
@@ -173,6 +176,11 @@
     .drawer-head h3 { margin:0; font-size:24px; letter-spacing:-.035em; }
     .drawer-section { margin-top:16px; }
     .drawer-section h4 { margin:0 0 8px; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.11em; }
+    .edit-form { display:grid; gap:10px; margin-top:14px; }
+    .edit-form label { display:grid; gap:6px; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.09em; }
+    .edit-form input, .edit-form textarea, .edit-form select { width:100%; border:1px solid var(--border2); border-radius:13px; background:var(--glass2); color:var(--text); padding:10px 12px; outline:none; text-transform:none; letter-spacing:normal; }
+    .edit-form textarea { min-height:170px; resize:vertical; line-height:1.45; }
+    .edit-form input:focus, .edit-form textarea:focus, .edit-form select:focus { border-color:color-mix(in srgb,var(--accent) 48%,transparent); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent); }
     .hidden { display:none !important; }
     @media (max-width: 980px) {
       body { overflow:auto; }
@@ -378,6 +386,7 @@ async function api(path, data) {
 function currentTheme() { return localStorage.getItem(THEME_KEY) || state.theme || 'dark'; }
 function setTheme(theme) { state.theme = theme || 'dark'; localStorage.setItem(THEME_KEY, state.theme); saveState(); }
 function normalizeApiState(data) {
+  data = data.state || data;
   const theme = currentTheme();
   state.approvals = data.approvals || [];
   state.ideas = data.ideas || [];
@@ -407,6 +416,7 @@ function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 async function resetDemo() { if (apiAvailable) { normalizeApiState(await api('/api/reset', {})); renderAll(); return; } state = seedState(); saveState(); renderAll(); }
 function escapeHtml(s='') { return String(s).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
 function taskDescription(t, label='Description') { return `<details class="task-description"><summary>${escapeHtml(label)}</summary><p>${escapeHtml(t.body || 'No task description yet — clarify scope, done criteria, and expected outcome before running.')}</p></details>`; }
+function taskBlocker(t) { return t.last_error ? `<div class="task-blocker"><b>Blocker / last error:</b> ${escapeHtml(t.last_error)}</div>` : ''; }
 function pill(text, cls='') { return `<span class="pill ${cls}">${escapeHtml(text)}</span>`; }
 function legend(items, title='Legend') {
   return `<div class="legend"><span class="legend-title">${escapeHtml(title)}</span>${items.map(([label, meaning, cls='']) => `<span class="legend-item">${pill(label, cls)} <span>${escapeHtml(meaning)}</span></span>`).join('')}</div>`;
@@ -577,6 +587,9 @@ function taskActionButtons(t) {
   if (busy) return `<div class="item-actions">${pill(t.run_status, taskRunClass(t.run_status))}<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button></div>`;
   return `<div class="item-actions"><button class="btn primary" data-action="task-run" data-id="${escapeHtml(t.id)}">Run</button><button class="btn" data-action="task-schedule" data-id="${escapeHtml(t.id)}">Schedule 04:30</button><button class="btn" data-action="task-done" data-id="${escapeHtml(t.id)}">Mark done</button>${t.run_status && t.run_status !== 'idle' ? `<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button>` : ''}</div>`;
 }
+function taskStatusOptions(status='open') {
+  return ['open','waiting','scheduled','done'].map(value => `<option value="${value}" ${value === status ? 'selected' : ''}>${value}</option>`).join('');
+}
 function taskMatchesFilter(t) {
   const run = t.run_status || 'idle';
   if (taskFilter === 'done') return t.status === 'done' || run === 'done';
@@ -593,7 +606,7 @@ function renderTasks() {
   root.innerHTML = tasks.length ? tasks.map(t => {
     const project = projectForTask(t);
     const scheduled = t.scheduled_for ? `<span>Scheduled: ${formatTime(t.scheduled_for)}</span>` : '';
-    return `<div class="item" data-task="${escapeHtml(t.id)}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="item-top"><div><div class="pill-row">${pill(t.project || 'project','blue')} ${pill(t.status || '', statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))}</div><h4>${escapeHtml(t.title)}</h4>${taskDescription(t)}</div></div><div class="relation-row"><span>Project:</span>${linkedProjectButton(project, 'Open')} ${scheduled}</div>${taskActionButtons(t)}</div>`;
+    return `<div class="item" data-task="${escapeHtml(t.id)}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="item-top"><div><div class="pill-row">${pill(t.project || 'project','blue')} ${pill(t.status || '', statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))}</div><h4>${escapeHtml(t.title)}</h4>${taskDescription(t)}${taskBlocker(t)}</div></div><div class="relation-row"><span>Project:</span>${linkedProjectButton(project, 'Open')} ${scheduled}</div>${taskActionButtons(t)}</div>`;
   }).join('') : `<div class="empty">No ${escapeHtml(taskFilter)} tasks</div>`;
 }
 function formatTime(value) {
@@ -669,6 +682,19 @@ async function transitionTask(id, action) {
   if (action === 'done') { task.status = 'done'; task.run_status = 'done'; task.last_run_at = new Date().toISOString(); }
   renderAll();
 }
+async function saveTask(id, form) {
+  const payload = { id, title: form.elements.title.value, body: form.elements.body.value, status: form.elements.status.value };
+  if (apiAvailable) { normalizeApiState(await api('/api/tasks/update', payload)); renderAll(); openTaskDrawer(id); return; }
+  const task = state.tasks.find(t => t.id === id);
+  if (!task) return;
+  task.title = payload.title.trim();
+  task.body = payload.body.trim();
+  task.status = payload.status;
+  if (task.status === 'done') { task.run_status = 'done'; task.last_run_at = new Date().toISOString(); }
+  if (['open','waiting'].includes(task.status) && ['queued','scheduled','running','done'].includes(task.run_status)) task.run_status = 'idle';
+  activity(`Task edited: ${task.title}`, 'Updated task title, description, or status from Cockpit UI.', 'Task', task.status, 'normal');
+  renderAll(); openTaskDrawer(id);
+}
 async function captureIdea() {
   const title = prompt('Idea title?');
   if (!title) return;
@@ -699,14 +725,14 @@ function openProjectDrawer(id, highlightTaskId='') {
   const idea = ideaForProject(project);
   const tasks = tasksForProject(project);
   const active = highlightTaskId || (tasks.find(t => t.status === 'open') || tasks[0])?.id || '';
-  const taskList = tasks.length ? tasks.map(t => `<div class="item ${t.id === active ? 'active-task' : ''}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="pill-row">${pill(t.status, statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))} ${t.id === active ? pill('active task','good') : ''}</div><h4>${escapeHtml(t.title)}</h4>${taskDescription(t)}<div class="relation-row"><span>Project:</span>${pill(project.title, 'blue')}</div>${taskActionButtons(t)}</div>`).join('') : '<div class="empty">No linked tasks yet</div>';
+  const taskList = tasks.length ? tasks.map(t => `<div class="item ${t.id === active ? 'active-task' : ''}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="pill-row">${pill(t.status, statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))} ${t.id === active ? pill('active task','good') : ''}</div><h4>${escapeHtml(t.title)}</h4>${taskDescription(t)}${taskBlocker(t)}<div class="relation-row"><span>Project:</span>${pill(project.title, 'blue')}</div>${taskActionButtons(t)}</div>`).join('') : '<div class="empty">No linked tasks yet</div>';
   openDrawer(`${drawerHead(project.title, 'Project details + linked tasks')}<div class="pill-row">${pill(project.status, statusClass(project.status))}</div><p>${escapeHtml(project.body)}</p><div class="drawer-section"><h4>Source idea</h4><div class="relation-row">${linkedIdeaButton(idea) || '<span class="pill blue">no source idea recorded</span>'}</div></div><div class="drawer-section"><h4>Tasks linked to this project</h4>${taskList}</div>`);
 }
 function openTaskDrawer(id) {
   const task = state.tasks.find(t => t.id === id); if (!task) return;
   const project = projectForTask(task);
-  const runMeta = `${task.scheduled_for ? `<div>Scheduled for</div><div>${formatTime(task.scheduled_for)}</div>` : ''}${task.last_run_at ? `<div>Last run</div><div>${formatTime(task.last_run_at)}</div>` : ''}${task.last_error ? `<div>Last error</div><div>${escapeHtml(task.last_error)}</div>` : ''}`;
-  openDrawer(`${drawerHead(task.title, 'Task details')}<div class="pill-row">${pill(task.status, statusClass(task.status))} ${pill(task.trigger || 'manual','blue')} ${pill(task.run_status || 'idle', taskRunClass(task.run_status || 'idle'))}</div>${taskDescription(task)}<div class="kv"><div>Trigger</div><div>${escapeHtml(task.trigger || 'manual')}</div><div>Run status</div><div>${escapeHtml(task.run_status || 'idle')}</div>${runMeta}</div><div class="drawer-section"><h4>Execution</h4>${taskActionButtons(task)}</div><div class="drawer-section"><h4>Project</h4><div class="relation-row">${linkedProjectButton(project)}</div></div>${project ? `<div class="drawer-section"><button class="btn primary" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}" data-task="${escapeHtml(task.id)}">Open project task list with this task highlighted</button></div>` : ''}`);
+  const runMeta = `${task.scheduled_for ? `<div>Scheduled for</div><div>${formatTime(task.scheduled_for)}</div>` : ''}${task.last_run_at ? `<div>Last run</div><div>${formatTime(task.last_run_at)}</div>` : ''}${task.last_error ? `<div>Blocker / last error</div><div>${escapeHtml(task.last_error)}</div>` : ''}`;
+  openDrawer(`${drawerHead(task.title, 'Task details')}<div class="pill-row">${pill(task.status, statusClass(task.status))} ${pill(task.trigger || 'manual','blue')} ${pill(task.run_status || 'idle', taskRunClass(task.run_status || 'idle'))}</div>${taskBlocker(task)}<form class="edit-form" data-task-edit="${escapeHtml(task.id)}"><label>Title<input name="title" value="${escapeHtml(task.title)}" required></label><label>Description<textarea name="body" required>${escapeHtml(task.body || '')}</textarea></label><label>Status<select name="status">${taskStatusOptions(task.status || 'open')}</select></label><div class="item-actions"><button class="btn primary" type="button" data-action="task-save" data-id="${escapeHtml(task.id)}">Save changes</button></div></form><div class="kv"><div>Trigger</div><div>${escapeHtml(task.trigger || 'manual')}</div><div>Run status</div><div>${escapeHtml(task.run_status || 'idle')}</div>${runMeta}</div><div class="drawer-section"><h4>Execution</h4>${taskActionButtons(task)}</div><div class="drawer-section"><h4>Project</h4><div class="relation-row">${linkedProjectButton(project)}</div></div>${project ? `<div class="drawer-section"><button class="btn primary" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}" data-task="${escapeHtml(task.id)}">Open project task list with this task highlighted</button></div>` : ''}`);
 }
 function showView(v) {
   $$('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -752,6 +778,10 @@ document.addEventListener('click', (event) => {
   if (action === 'task-schedule') transitionTask(id, 'schedule').catch(err => alert(err.message));
   if (action === 'task-reset') transitionTask(id, 'reset').catch(err => alert(err.message));
   if (action === 'task-done') transitionTask(id, 'done').catch(err => alert(err.message));
+  if (action === 'task-save') {
+    const form = btn.closest('form');
+    if (form) saveTask(id, form).catch(err => alert(err.message));
+  }
   if (action === 'close-drawer') closeDrawer();
 });
 refreshFromApi();
