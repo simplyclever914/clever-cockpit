@@ -486,6 +486,8 @@ async function resetDemo() { if (apiAvailable) { applyApiState(await api('/api/r
 function escapeHtml(s='') { return String(s).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
 function taskDescription(t, label='Описание') { return `<details class="task-description"><summary>${escapeHtml(label)}</summary><p>${escapeHtml(t.body || 'Описание задачи ещё не задано — перед запуском нужно уточнить результат, объём работ и критерии готовности.')}</p></details>`; }
 function taskBlocker(t) { return t.last_error ? `<div class="task-blocker"><b>Блокер / последняя ошибка:</b> ${escapeHtml(t.last_error)}</div>` : ''; }
+function userNotesBlock(x) { return x?.user_notes ? `<div class="task-blocker"><b>Замечания Вадима:</b> ${escapeHtml(x.user_notes)}</div>` : ''; }
+function userNotesForm(type, x) { return `<form class="edit-form" data-notes-edit="${escapeHtml(type)}" data-id="${escapeHtml(x.id)}"><label>Замечания Вадима<textarea name="user_notes" placeholder="Уточнения, поправки, ограничения, что обязательно учесть при реализации">${escapeHtml(x.user_notes || '')}</textarea><p class="form-hint">Эти заметки не заменяют описание: runner обязан учитывать их вместе с идеей/проектом/задачей.</p></label><div class="item-actions"><button class="btn primary" type="button" data-action="notes-save" data-type="${escapeHtml(type)}" data-id="${escapeHtml(x.id)}">Сохранить замечания</button></div></form>`; }
 function pill(text, cls='') { return `<span class="pill ${cls}">${escapeHtml(text)}</span>`; }
 function legend(items, title='Legend') {
   return `<div class="legend"><span class="legend-title">${escapeHtml(title)}</span>${items.map(([label, meaning, cls='']) => `<span class="legend-item">${pill(label, cls)} <span>${escapeHtml(meaning)}</span></span>`).join('')}</div>`;
@@ -637,7 +639,7 @@ function renderIdeas() {
       ? `<div class="item-actions"><button class="btn primary" data-action="idea-ok" data-id="${idea.id}">OK</button><button class="btn" data-action="idea-deny" data-id="${idea.id}">Deny</button><button class="btn" data-action="idea-task" data-id="${idea.id}">Make task</button></div>`
       : `<div class="item-actions">${pill(converted ? 'converted to project/task' : 'closed', converted ? 'good' : 'warn')}</div>`;
     const relations = `<div class="relation-row"><span>Linked:</span>${linkedProjectButton(project)}${project ? `<button class="link-btn" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}">Tasks: ${tasks.length}</button>` : ''}</div>`;
-    lane.insertAdjacentHTML('beforeend', `<div class="item" data-idea="${idea.id}" data-action="open-idea" data-id="${idea.id}"><h4>${escapeHtml(idea.title)}</h4><p>${escapeHtml(idea.body)}</p>${relations}${actions}</div>`);
+    lane.insertAdjacentHTML('beforeend', `<div class="item" data-idea="${idea.id}" data-action="open-idea" data-id="${idea.id}"><h4>${escapeHtml(idea.title)}</h4><p>${escapeHtml(idea.body)}</p>${userNotesBlock(idea)}${relations}${actions}</div>`);
   });
   Object.values(lanes).forEach(el => { if (!el.innerHTML.trim()) el.innerHTML = '<div class="empty">Empty</div>'; });
 }
@@ -649,7 +651,7 @@ function renderProjects() {
     const tasks = tasksForProject(p);
     const active = tasks.find(t => t.status === 'open') || tasks[0];
     const idea = ideaForProject(p);
-    return `<div class="item ${p.status === 'archived' ? 'archived-project' : ''}" data-project="${escapeHtml(p.id)}" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}"><div class="item-top"><div><div class="pill-row">${pill(p.status,'blue')} ${pill(p.status,statusClass(p.status))}</div><h4>${escapeHtml(p.title)}</h4><p>${escapeHtml(p.body)}</p></div></div><div class="relation-row">${linkedIdeaButton(idea)}<button class="link-btn" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}">Tasks: ${tasks.length}${active ? ` · active: ${escapeHtml(active.title)}` : ''}</button></div></div>`;
+    return `<div class="item ${p.status === 'archived' ? 'archived-project' : ''}" data-project="${escapeHtml(p.id)}" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}"><div class="item-top"><div><div class="pill-row">${pill(p.status,'blue')} ${pill(p.status,statusClass(p.status))}</div><h4>${escapeHtml(p.title)}</h4><p>${escapeHtml(p.body)}</p>${userNotesBlock(p)}</div></div><div class="relation-row">${linkedIdeaButton(idea)}<button class="link-btn" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}">Tasks: ${tasks.length}${active ? ` · active: ${escapeHtml(active.title)}` : ''}</button></div></div>`;
   }).join('') : '<div class="empty">Nothing here yet</div>';
 }
 function taskRunClass(status) { return ['done'].includes(status) ? 'good' : ['failed'].includes(status) ? 'bad' : ['queued','scheduled','running'].includes(status) ? 'warn' : 'blue'; }
@@ -689,7 +691,7 @@ function renderTasks() {
     const project = projectForTask(t);
     const scheduled = t.scheduled_for ? `<span>Scheduled: ${formatTime(t.scheduled_for)}</span>` : '';
     const runningClass = (t.run_status || 'idle') === 'running' ? ' running-task' : '';
-    return `<div class="item${runningClass}" data-task="${escapeHtml(t.id)}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="item-top"><div><div class="pill-row">${pill(t.project || 'project','blue')} ${pill(t.status || '', statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))}</div><h4>${escapeHtml(t.title)}</h4>${taskDescription(t)}${taskBlocker(t)}</div></div><div class="relation-row"><span>Project:</span>${linkedProjectButton(project, 'Open')} ${scheduled}</div>${taskActionButtons(t)}</div>`;
+    return `<div class="item${runningClass}" data-task="${escapeHtml(t.id)}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="item-top"><div><div class="pill-row">${pill(t.project || 'project','blue')} ${pill(t.status || '', statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))}</div><h4>${escapeHtml(t.title)}</h4>${taskDescription(t)}${userNotesBlock(t)}${taskBlocker(t)}</div></div><div class="relation-row"><span>Project:</span>${linkedProjectButton(project, 'Open')} ${scheduled}</div>${taskActionButtons(t)}</div>`;
   }).join('') : `<div class="empty">No ${escapeHtml(taskFilter)} tasks</div>`;
 }
 function formatTime(value) {
@@ -777,32 +779,44 @@ async function transitionProject(id, action) {
   renderAll(); openProjectDrawer(id);
 }
 async function saveTask(id, form) {
-  const payload = { id, title: form.elements.title.value, body: form.elements.body.value, status: form.elements.status.value };
+  const payload = { id, title: form.elements.title.value, body: form.elements.body.value, user_notes: form.elements.user_notes?.value || '', status: form.elements.status.value };
   if (apiAvailable) { applyApiState(await api('/api/tasks/update', payload), { force:true }); openTaskDrawer(id); return; }
   const task = state.tasks.find(t => t.id === id);
   if (!task) return;
   task.title = payload.title.trim();
   task.body = payload.body.trim();
+  task.user_notes = payload.user_notes.trim();
   task.status = payload.status;
   if (task.status === 'done') { task.run_status = 'done'; task.last_run_at = new Date().toISOString(); }
   if (['open','waiting'].includes(task.status) && ['queued','scheduled','running','done'].includes(task.run_status)) task.run_status = 'idle';
   activity(`Task edited: ${task.title}`, 'Updated task title, description, or status from Cockpit UI.', 'Task', task.status, 'normal');
   renderAll(); openTaskDrawer(id);
 }
+async function saveNotes(type, id, form) {
+  const payload = { type, id, user_notes: form.elements.user_notes.value };
+  if (apiAvailable) { applyApiState(await api('/api/notes/update', payload), { force:true }); if (type === 'ideas') openIdeaDrawer(id); if (type === 'projects') openProjectDrawer(id); if (type === 'tasks') openTaskDrawer(id); return; }
+  const collection = type === 'ideas' ? state.ideas : type === 'projects' ? state.projects : state.tasks;
+  const item = collection.find(x => x.id === id);
+  if (!item) return;
+  item.user_notes = payload.user_notes.trim();
+  activity(`User notes updated: ${item.title}`, item.user_notes || 'User notes cleared.', type.slice(0,-1), item.status || 'updated', 'normal');
+  renderAll(); if (type === 'ideas') openIdeaDrawer(id); if (type === 'projects') openProjectDrawer(id); if (type === 'tasks') openTaskDrawer(id);
+}
 async function saveNewIdea(form) {
   const title = form.elements.title.value.trim();
   const body = form.elements.body.value.trim() || 'Captured manually.';
   if (!title) { form.elements.title.focus(); return; }
-  if (apiAvailable) { applyApiState(await api('/api/ideas', { title, body, source: 'ui' }), { force:true }); closeDrawer(); showView('ideas'); return; }
+  const user_notes = form.elements.user_notes?.value.trim() || '';
+  if (apiAvailable) { applyApiState(await api('/api/ideas', { title, body, user_notes, source: 'ui' }), { force:true }); closeDrawer(); showView('ideas'); return; }
   const id = `${slugify(title)}-${Date.now().toString(36)}`;
-  state.ideas.unshift({ id, title, body, status: 'proposed' });
+  state.ideas.unshift({ id, title, body, user_notes, status: 'proposed' });
   activity(`Captured idea: ${title}`, body, 'Idea', 'proposed', 'normal');
   closeDrawer();
   showView('ideas');
   renderAll();
 }
 function captureIdea() {
-  openDrawer(`${drawerHead('Новая идея', 'Сначала кладём в inbox, не превращая в обязательство')}<form class="edit-form" data-new-idea><label>Название<input name="title" required placeholder="Например: сделать hold для approvals"></label><label>Контекст / зачем / следующий намёк<textarea name="body" required placeholder="Почему это важно, какой результат ожидается, что проверить перед запуском">Captured manually from Cockpit UI.</textarea><p class="form-hint">Хорошая идея — это сигнал, а не обещание сделать. Потом её можно одобрить, превратить в задачу, отложить или закрыть.</p></label><div class="item-actions"><button class="btn primary" type="button" data-action="idea-create-save">Сохранить идею</button><button class="btn" type="button" data-action="close-drawer">Отмена</button></div></form>`);
+  openDrawer(`${drawerHead('Новая идея', 'Сначала кладём в inbox, не превращая в обязательство')}<form class="edit-form" data-new-idea><label>Название<input name="title" required placeholder="Например: сделать hold для approvals"></label><label>Контекст / зачем / следующий намёк<textarea name="body" required placeholder="Почему это важно, какой результат ожидается, что проверить перед запуском">Captured manually from Cockpit UI.</textarea><p class="form-hint">Хорошая идея — это сигнал, а не обещание сделать. Потом её можно одобрить, превратить в задачу, отложить или закрыть.</p></label><label>Замечания Вадима<textarea name="user_notes" placeholder="Что поправить/уточнить, ограничения, предпочтения"></textarea></label><div class="item-actions"><button class="btn primary" type="button" data-action="idea-create-save">Сохранить идею</button><button class="btn" type="button" data-action="close-drawer">Отмена</button></div></form>`);
   setTimeout(() => $('#detail-drawer input[name="title"]')?.focus(), 0);
 }
 function openDrawer(html) {
@@ -817,7 +831,7 @@ function openIdeaDrawer(id) {
   const idea = state.ideas.find(i => i.id === id); if (!idea) return;
   const project = projectForIdea(idea);
   const tasks = tasksForProject(project);
-  openDrawer(`${drawerHead(idea.title, 'Idea details')}<div class="pill-row">${pill(idea.status, statusClass(idea.status))}</div><p>${escapeHtml(idea.body)}</p><div class="drawer-section"><h4>Linked project</h4><div class="relation-row">${linkedProjectButton(project)}</div></div><div class="drawer-section"><h4>Linked tasks</h4><div class="relation-row">${taskButtons(tasks, project?.id || '')}</div></div>`);
+  openDrawer(`${drawerHead(idea.title, 'Idea details')}<div class="pill-row">${pill(idea.status, statusClass(idea.status))}</div><p>${escapeHtml(idea.body)}</p>${userNotesBlock(idea)}<div class="drawer-section"><h4>Замечания пользователя</h4>${userNotesForm('ideas', idea)}</div><div class="drawer-section"><h4>Linked project</h4><div class="relation-row">${linkedProjectButton(project)}</div></div><div class="drawer-section"><h4>Linked tasks</h4><div class="relation-row">${taskButtons(tasks, project?.id || '')}</div></div>`);
 }
 function openApprovalDrawer(id) {
   const approval = state.approvals.find(a => a.id === id) || (state.held_approvals || []).find(a => a.id === id);
@@ -837,13 +851,13 @@ function openProjectDrawer(id, highlightTaskId='') {
   const archiveAction = project.status === 'archived'
     ? `<button class="btn primary" data-action="project-restore" data-id="${escapeHtml(project.id)}">Restore to maintenance</button>`
     : `<button class="btn" data-action="project-archive" data-id="${escapeHtml(project.id)}">Archive project</button>`;
-  openDrawer(`${drawerHead(project.title, 'Project details + linked tasks')}<div class="pill-row">${pill(project.status, statusClass(project.status))}</div><p>${escapeHtml(project.body)}</p><div class="drawer-section"><h4>Source idea</h4><div class="relation-row">${linkedIdeaButton(idea) || '<span class="pill blue">no source idea recorded</span>'}</div></div><div class="drawer-section"><h4>Project actions</h4><div class="item-actions">${archiveAction}</div></div><div class="drawer-section"><h4>Tasks linked to this project</h4>${taskList}</div>`);
+  openDrawer(`${drawerHead(project.title, 'Project details + linked tasks')}<div class="pill-row">${pill(project.status, statusClass(project.status))}</div><p>${escapeHtml(project.body)}</p>${userNotesBlock(project)}<div class="drawer-section"><h4>Замечания пользователя</h4>${userNotesForm('projects', project)}</div><div class="drawer-section"><h4>Source idea</h4><div class="relation-row">${linkedIdeaButton(idea) || '<span class="pill blue">no source idea recorded</span>'}</div></div><div class="drawer-section"><h4>Project actions</h4><div class="item-actions">${archiveAction}</div></div><div class="drawer-section"><h4>Tasks linked to this project</h4>${taskList}</div>`);
 }
 function openTaskDrawer(id) {
   const task = state.tasks.find(t => t.id === id); if (!task) return;
   const project = projectForTask(task);
   const runMeta = `${task.scheduled_for ? `<div>Scheduled for</div><div>${formatTime(task.scheduled_for)}</div>` : ''}${task.last_run_at ? `<div>Last run</div><div>${formatTime(task.last_run_at)}</div>` : ''}${task.last_error ? `<div>Блокер / последняя ошибка</div><div>${escapeHtml(task.last_error)}</div>` : ''}`;
-  openDrawer(`${drawerHead(task.title, 'Детали задачи')}<div class="pill-row">${pill(task.status, statusClass(task.status))} ${pill(task.trigger || 'manual','blue')} ${pill(task.run_status || 'idle', taskRunClass(task.run_status || 'idle'))}</div>${taskBlocker(task)}<div class="drawer-card"><h4>Описание</h4><p>${escapeHtml(task.body || 'Описание задачи ещё не задано.')}</p></div><form class="edit-form" data-task-edit="${escapeHtml(task.id)}"><label>Название<input name="title" value="${escapeHtml(task.title)}" required></label><label>Описание<textarea name="body" required>${escapeHtml(task.body || '')}</textarea><p class="form-hint">Нужно сохранить результат, объём и критерий готовности — иначе задача быстро снова станет мутной.</p></label><label>Статус<select name="status">${taskStatusOptions(task.status || 'open')}</select></label><div class="item-actions"><button class="btn primary" type="button" data-action="task-save" data-id="${escapeHtml(task.id)}">Сохранить</button></div></form><div class="drawer-section"><h4>Run metadata</h4><div class="kv"><div>Trigger</div><div>${escapeHtml(task.trigger || 'manual')}</div><div>Run status</div><div>${escapeHtml(task.run_status || 'idle')}</div>${runMeta}</div></div><div class="drawer-section"><h4>Execution</h4>${taskActionButtons(task)}</div><div class="drawer-section"><h4>Project</h4><div class="relation-row">${linkedProjectButton(project)}</div></div>${project ? `<div class="drawer-section"><button class="btn primary" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}" data-task="${escapeHtml(task.id)}">Открыть список задач проекта с подсветкой этой задачи</button></div>` : ''}`);
+  openDrawer(`${drawerHead(task.title, 'Детали задачи')}<div class="pill-row">${pill(task.status, statusClass(task.status))} ${pill(task.trigger || 'manual','blue')} ${pill(task.run_status || 'idle', taskRunClass(task.run_status || 'idle'))}</div>${userNotesBlock(task)}${taskBlocker(task)}<div class="drawer-card"><h4>Описание</h4><p>${escapeHtml(task.body || 'Описание задачи ещё не задано.')}</p></div><form class="edit-form" data-task-edit="${escapeHtml(task.id)}"><label>Название<input name="title" value="${escapeHtml(task.title)}" required></label><label>Описание<textarea name="body" required>${escapeHtml(task.body || '')}</textarea><p class="form-hint">Нужно сохранить результат, объём и критерий готовности — иначе задача быстро снова станет мутной.</p></label><label>Замечания Вадима<textarea name="user_notes" placeholder="Уточнения/поправки, которые runner обязан учесть">${escapeHtml(task.user_notes || '')}</textarea></label><label>Статус<select name="status">${taskStatusOptions(task.status || 'open')}</select></label><div class="item-actions"><button class="btn primary" type="button" data-action="task-save" data-id="${escapeHtml(task.id)}">Сохранить</button></div></form><div class="drawer-section"><h4>Run metadata</h4><div class="kv"><div>Trigger</div><div>${escapeHtml(task.trigger || 'manual')}</div><div>Run status</div><div>${escapeHtml(task.run_status || 'idle')}</div>${runMeta}</div></div><div class="drawer-section"><h4>Execution</h4>${taskActionButtons(task)}</div><div class="drawer-section"><h4>Project</h4><div class="relation-row">${linkedProjectButton(project)}</div></div>${project ? `<div class="drawer-section"><button class="btn primary" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}" data-task="${escapeHtml(task.id)}">Открыть список задач проекта с подсветкой этой задачи</button></div>` : ''}`);
 }
 function showView(v) {
   $$('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -893,6 +907,10 @@ document.addEventListener('click', (event) => {
   if (action === 'task-save') {
     const form = btn.closest('form');
     if (form) saveTask(id, form).catch(err => alert(err.message));
+  }
+  if (action === 'notes-save') {
+    const form = btn.closest('form');
+    if (form) saveNotes(btn.dataset.type, id, form).catch(err => alert(err.message));
   }
   if (action === 'idea-create-save') {
     const form = btn.closest('form');

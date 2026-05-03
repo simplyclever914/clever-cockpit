@@ -60,6 +60,7 @@ create table if not exists ideas (
   id text primary key,
   title text not null,
   body text not null default '',
+  user_notes text not null default '',
   status text not null default 'proposed',
   source text,
   created_at text not null,
@@ -70,6 +71,7 @@ create table if not exists projects (
   title text not null,
   status text not null default 'draft',
   body text not null default '',
+  user_notes text not null default '',
   source_idea_id text,
   created_at text not null,
   updated_at text not null
@@ -80,6 +82,7 @@ create table if not exists tasks (
   project text not null default 'Inbox',
   status text not null default 'open',
   body text not null default '',
+  user_notes text not null default '',
   source_idea_id text,
   created_at text not null,
   updated_at text not null
@@ -159,6 +162,10 @@ def migrate(conn: sqlite3.Connection) -> None:
     for column, sql in task_migrations.items():
         if column not in task_columns:
             conn.execute(sql)
+    for table in ("ideas", "projects", "tasks"):
+        columns = {row[1] for row in conn.execute(f"pragma table_info({table})")}
+        if "user_notes" not in columns:
+            conn.execute(f"alter table {table} add column user_notes text not null default ''")
     conn.commit()
 
 
@@ -169,8 +176,8 @@ def seed(conn: sqlite3.Connection, force: bool = False) -> None:
         return
     t = now()
     conn.executemany("insert or ignore into approvals(id,title,kind,priority,body,status,handler,payload_json,created_at,updated_at) values (?,?,?,?,?,?,?,?,?,?)", [(a,b,c,d,e,"pending","record_only",json.dumps({"note": e}, ensure_ascii=False),t,t) for a,b,c,d,e in SEED["approvals"]])
-    conn.executemany("insert or ignore into ideas values (?,?,?,?,?,?,?)", [(a,b,c,d,e,t,t) for a,b,c,d,e in SEED["ideas"]])
-    conn.executemany("insert or ignore into projects values (?,?,?,?,?,?,?)", [(a,b,c,d,e,t,t) for a,b,c,d,e in SEED["projects"]])
+    conn.executemany("insert or ignore into ideas(id,title,body,status,source,created_at,updated_at) values (?,?,?,?,?,?,?)", [(a,b,c,d,e,t,t) for a,b,c,d,e in SEED["ideas"]])
+    conn.executemany("insert or ignore into projects(id,title,status,body,source_idea_id,created_at,updated_at) values (?,?,?,?,?,?,?)", [(a,b,c,d,e,t,t) for a,b,c,d,e in SEED["projects"]])
     conn.executemany("insert or ignore into tasks(id,title,project,status,body,source_idea_id,created_at,updated_at) values (?,?,?,?,?,?,?,?)", [(a,b,c,d,e,f,t,t) for a,b,c,d,e,f in SEED["tasks"]])
     conn.executemany("insert into activity(title,kind,status,priority,body,created_at) values (?,?,?,?,?,?)", [(a,b,c,d,e,t) for a,b,c,d,e in SEED["activity"]])
     conn.commit()
@@ -429,14 +436,15 @@ def create_task(conn: sqlite3.Connection, data: dict) -> dict:
         raise ValueError("status must be open, waiting, scheduled, or done")
     trigger = (data.get("trigger") or "manual").strip() or "manual"
     run_status = (data.get("run_status") or "idle").strip() or "idle"
+    user_notes = (data.get("user_notes") or "").strip()
     source_idea_id = data.get("source_idea_id")
     t = now()
     conn.execute(
         """
-        insert into tasks(id,title,project,status,body,source_idea_id,created_at,updated_at,trigger,run_status)
-        values (?,?,?,?,?,?,?,?,?,?)
+        insert into tasks(id,title,project,status,body,user_notes,source_idea_id,created_at,updated_at,trigger,run_status)
+        values (?,?,?,?,?,?,?,?,?,?,?)
         """,
-        (task_id, title, project, status, body, source_idea_id, t, t, trigger, run_status),
+        (task_id, title, project, status, body, user_notes, source_idea_id, t, t, trigger, run_status),
     )
     add_activity(conn, f"Task created: {title}", body, "Task", status)
     conn.commit()
@@ -456,6 +464,7 @@ def update_task(conn: sqlite3.Connection, data: dict) -> dict | None:
         raise ValueError("title required")
     body = (data.get("body") if data.get("body") is not None else row["body"]).strip()
     validate_task_description(body)
+    user_notes = (data.get("user_notes") if data.get("user_notes") is not None else row["user_notes"]).strip()
     status = (data.get("status") if data.get("status") is not None else row["status"]).strip() or "open"
     if status not in {"open", "waiting", "scheduled", "done"}:
         raise ValueError("status must be open, waiting, scheduled, or done")
@@ -468,8 +477,8 @@ def update_task(conn: sqlite3.Connection, data: dict) -> dict | None:
     elif status in {"open", "waiting"} and run_status in {"queued", "scheduled", "running", "done"}:
         run_status = "idle"
     conn.execute(
-        "update tasks set title=?, body=?, status=?, run_status=?, last_run_at=?, last_error=null, updated_at=? where id=?",
-        (title, body, status, run_status, last_run_at, t, task_id),
+        "update tasks set title=?, body=?, user_notes=?, status=?, run_status=?, last_run_at=?, last_error=null, updated_at=? where id=?",
+        (title, body, user_notes, status, run_status, last_run_at, t, task_id),
     )
     add_activity(conn, f"Task edited: {title}", "Updated task title, description, or status from Cockpit UI.", "Task", status)
     conn.commit()
@@ -601,11 +610,27 @@ class Handler(SimpleHTTPRequestHandler):
                     if not title:
                         self.send_json({"error": "title required"}, 400); return
                     body = (data.get("body") or "").strip()
+                    user_notes = (data.get("user_notes") or "").strip()
                     source = data.get("source") or "manual"
                     item_id = data.get("id") or f"{slugify(title)}-{secrets.token_hex(3)}"
                     t = now()
-                    conn.execute("insert into ideas values (?,?,?,?,?,?,?)", (item_id, title, body, "proposed", source, t, t))
+                    conn.execute("insert into ideas(id,title,body,user_notes,status,source,created_at,updated_at) values (?,?,?,?,?,?,?,?)", (item_id, title, body, user_notes, "proposed", source, t, t))
                     add_activity(conn, f"Captured idea: {title}", body, "Idea", "proposed")
+                    conn.commit()
+                elif parsed.path == "/api/notes/update":
+                    table = (data.get("type") or "").strip()
+                    item_id = (data.get("id") or "").strip()
+                    user_notes = (data.get("user_notes") or "").strip()
+                    if table not in {"ideas", "projects", "tasks"}:
+                        self.send_json({"error": "type must be ideas, projects, or tasks"}, 400); return
+                    if not item_id:
+                        self.send_json({"error": "id required"}, 400); return
+                    row = conn.execute(f"select * from {table} where id=?", (item_id,)).fetchone()
+                    if not row:
+                        self.send_json({"error": "item not found"}, 404); return
+                    t = now()
+                    conn.execute(f"update {table} set user_notes=?, updated_at=? where id=?", (user_notes, t, item_id))
+                    add_activity(conn, f"User notes updated: {row['title']}", user_notes or "User notes cleared.", table[:-1].title(), row["status"] if "status" in row.keys() else "updated")
                     conn.commit()
                 elif parsed.path == "/api/ideas/transition":
                     idea_id = data["id"]
@@ -621,7 +646,7 @@ class Handler(SimpleHTTPRequestHandler):
                         conn.execute("update ideas set status='approved', updated_at=? where id=?", (t, idea_id))
                         project_id = slugify(idea["title"])
                         task_id = f"{project_id}-next"
-                        conn.execute("insert or ignore into projects values (?,?,?,?,?,?,?)", (project_id, idea["title"], "draft", "Draft project created from approved idea. Confirm before making active.", idea_id, t, t))
+                        conn.execute("insert or ignore into projects(id,title,status,body,source_idea_id,created_at,updated_at) values (?,?,?,?,?,?,?)", (project_id, idea["title"], "draft", "Draft project created from approved idea. Confirm before making active.", idea_id, t, t))
                         task_title = f"Реализовать: {idea['title']}" if action == "task" else f"Определить следующий шаг: {idea['title']}"
                         task_body = "Результат: одобренная идея превращена в одно понятное следующее действие. Объём: уточнить владельца, ожидаемый артефакт и критерии готовности перед запуском. Готово когда: связь проект/задача явная, а следующий шаг исполнения не требует догадок. По умолчанию задача запускается вручную через Run или планируется на 04:30 MSK."
                         if not conn.execute("select 1 from tasks where id=?", (task_id,)).fetchone():
