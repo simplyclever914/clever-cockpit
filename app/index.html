@@ -114,6 +114,9 @@
     .item-top { display:flex; gap:10px; align-items:flex-start; justify-content:space-between; }
     .item h4 { margin:4px 0 8px; font-size:15px; }
     .item p { margin:0; color:var(--muted); font-size:13px; line-height:1.45; }
+    .idea-item p { display:-webkit-box; -webkit-line-clamp:6; -webkit-box-orient:vertical; overflow:hidden; }
+    .idea-item h4 { overflow-wrap:anywhere; }
+    #ideas-archive-panel { margin-top:16px; }
     .task-description { margin-top:8px; color:var(--muted); font-size:13px; line-height:1.45; }
     .task-description summary { cursor:pointer; color:var(--soft); font-size:12px; user-select:none; }
     .task-description[open] summary { margin-bottom:6px; }
@@ -145,9 +148,12 @@
     .preview code { background:rgba(0,0,0,.18); border:1px solid var(--border); border-radius:8px; padding:2px 6px; }
     .kv { display:grid; grid-template-columns: 120px 1fr; gap:8px; font-size:13px; margin: 14px 0; }
     .kv div:nth-child(odd) { color:var(--soft); }
-    .kanban { display:grid; grid-template-columns: repeat(4,minmax(190px,1fr)); gap:14px; }
+    .kanban { display:grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap:14px; align-items:start; }
     .lane { padding:12px; min-height:420px; }
     .lane h3 { font-size:14px; margin:0 0 10px; color:var(--muted); text-transform:uppercase; letter-spacing:.1em; }
+    .lane.empty-lane { display:none; }
+    .lane.wide-lane { grid-column:1 / -1; }
+    .lane.wide-lane > div { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:10px; }
     .arch { min-height: 620px; position:relative; overflow:auto; }
     .arch svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
     .node { position:absolute; width:148px; padding:11px; border-radius:16px; border:1px solid var(--border2); background:var(--glass); box-shadow:0 10px 40px rgba(0,0,0,.20); }
@@ -704,7 +710,7 @@ function ideaCard(idea) {
     ? `<div class="item-actions"><button class="btn primary" data-action="idea-task" data-id="${escapeHtml(idea.id)}">Make task</button><button class="btn" data-action="idea-deny" data-id="${escapeHtml(idea.id)}">Park</button><button class="btn" data-action="idea-dismiss" data-id="${escapeHtml(idea.id)}">Dismiss</button></div>`
     : `<div class="item-actions">${pill(converted ? 'converted to project/task' : 'archived', converted ? 'good' : 'warn')}</div>`;
   const relations = `<div class="relation-row"><span>Linked:</span>${linkedProjectButton(project)}${project ? `<button class="link-btn" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}">Tasks: ${tasks.length}</button>` : ''}</div>`;
-  return `<div class="item" data-idea="${escapeHtml(idea.id)}" data-action="open-idea" data-id="${escapeHtml(idea.id)}"><div class="pill-row">${pill(idea.status, statusClass(idea.status))}</div><h4>${escapeHtml(idea.title)}</h4><p>${escapeHtml(idea.body)}</p>${userNotesBlock(idea)}${relations}${actions}</div>`;
+  return `<div class="item idea-item" data-idea="${escapeHtml(idea.id)}" data-action="open-idea" data-id="${escapeHtml(idea.id)}"><div class="pill-row">${pill(idea.status, statusClass(idea.status))}</div><h4>${escapeHtml(idea.title)}</h4><p>${escapeHtml(idea.body)}</p>${userNotesBlock(idea)}${relations}${actions}</div>`;
 }
 function renderIdeas() {
   const lanes = { proposed: $('#ideas-proposed'), review: $('#ideas-review'), approved: $('#ideas-approved') };
@@ -721,7 +727,15 @@ function renderIdeas() {
     const lane = lanes[idea.status] || lanes.approved;
     lane?.insertAdjacentHTML('beforeend', ideaCard(idea));
   });
-  Object.values(lanes).forEach(el => { if (el && !el.innerHTML.trim()) el.innerHTML = '<div class="empty">Empty</div>'; });
+  Object.entries(lanes).forEach(([key, el]) => {
+    const lane = el?.closest('.lane');
+    const hasItems = !!el?.querySelector('.item');
+    if (el && !hasItems) el.innerHTML = '<div class="empty">Empty</div>';
+    lane?.classList.toggle('empty-lane', !hasItems);
+    lane?.classList.toggle('wide-lane', false);
+  });
+  const activeLaneEntries = Object.entries(lanes).filter(([, el]) => !!el?.querySelector('.item'));
+  if (activeLaneEntries.length === 1) activeLaneEntries[0][1].closest('.lane')?.classList.add('wide-lane');
   if (archive && !archive.innerHTML.trim()) archive.innerHTML = '<div class="empty">No archived ideas match.</div>';
 }
 function renderProjects() {
