@@ -278,7 +278,7 @@
         <div class="card panel" style="margin-bottom:16px"><div class="panel-head"><h3>Idea intake</h3><button class="btn primary">+ Capture from chat</button></div><p style="color:var(--muted);margin-top:0">Каждая понравившаяся идея получает следующий шаг: <b>convert to project</b>, <b>create tasks</b>, <b>schedule review</b>, или <b>park with reason</b>. Никаких “надо бы потом”.</p><div id="legend-ideas"></div></div>
         <div class="kanban"><div class="card lane"><h3>Captured</h3><div id="ideas-proposed"></div></div><div class="card lane"><h3>Needs decision</h3><div id="ideas-review"></div></div><div class="card lane"><h3>Converted</h3><div id="ideas-approved"></div></div></div><details class="card panel" id="ideas-archive-panel"><summary style="cursor:pointer;font-weight:800">Archive: done / parked ideas</summary><p style="color:var(--muted);margin-top:10px">Закрытые идеи не занимают основной поток. Используй поиск, если нужно поднять старое решение.</p><input id="idea-archive-search" placeholder="Search archived ideas…" style="width:100%;border:1px solid var(--border2);border-radius:13px;background:var(--glass2);color:var(--text);padding:10px 12px;margin-bottom:12px"><div id="ideas-done"></div></details>
       </section>
-      <section id="view-projects" class="view hidden"><div class="grid content-grid"><div class="card panel"><div class="panel-head"><h3>Projects from approved ideas</h3><button class="btn primary">+ New project</button></div><div id="legend-projects"></div><div id="project-list"></div></div><div class="card panel detail"><div class="preview"><h3>Project rule</h3><p>Approved idea should become a project only if it has owner, outcome, next task, and review date.</p><div class="kv"><div>Example</div><div>Clever Cockpit</div><div>Outcome</div><div>Не терять идеи/задачи из чата</div><div>Next</div><div>Create local datastore + add Telegram capture command</div></div></div></div></div></section>
+      <section id="view-projects" class="view hidden"><div class="grid content-grid"><div class="card panel"><div class="panel-head"><h3>Projects from approved ideas</h3><button class="btn primary">+ New project</button></div><div id="legend-projects"></div><div id="project-list"></div><details class="card panel" id="projects-archive-panel"><summary style="cursor:pointer;font-weight:800">Archive: archived projects</summary><p style="color:var(--muted);margin-top:10px">Закрытые проекты не занимают основной список, но остаются searchable.</p><input id="project-archive-search" placeholder="Search archived projects…" style="width:100%;border:1px solid var(--border2);border-radius:13px;background:var(--glass2);color:var(--text);padding:10px 12px;margin-bottom:12px"><div id="project-archive-list"></div></details></div><div class="card panel detail"><div class="preview"><h3>Project rule</h3><p>Approved idea should become a project only if it has owner, outcome, next task, and review date.</p><div class="kv"><div>Example</div><div>Clever Cockpit</div><div>Outcome</div><div>Не терять идеи/задачи из чата</div><div>Next</div><div>Create local datastore + add Telegram capture command</div></div></div></div></div></section>
       <section id="view-tasks" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Задачи</h3><div class="tabs"><button class="tab active" data-task-filter="open">Ready / open</button><button class="tab" data-task-filter="stale">Open/idle triage</button><button class="tab" data-task-filter="waiting">В работе / очередь / ожидание</button><button class="tab" data-task-filter="done">Готово</button></div></div><div id="legend-tasks"></div><div id="task-list"></div></div></section>
       <section id="view-workflow" class="view hidden">
         <div class="workflow-grid">
@@ -743,16 +743,22 @@ function renderIdeas() {
   if (activeLaneEntries.length === 1) activeLaneEntries[0][1].closest('.lane')?.classList.add('wide-lane');
   if (archive && !archive.innerHTML.trim()) archive.innerHTML = '<div class="empty">No archived ideas match.</div>';
 }
+function projectCard(p) {
+  const tasks = tasksForProject(p);
+  const active = tasks.find(t => !['done','confirmed','cancelled'].includes(t.status) && (t.run_status || 'idle') !== 'done') || tasks[0];
+  const idea = ideaForProject(p);
+  return `<div class="item ${p.status === 'archived' ? 'archived-project' : ''}" data-project="${escapeHtml(p.id)}" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}"><div class="item-top"><div><div class="pill-row">${pill(p.status,'blue')} ${pill(p.status,statusClass(p.status))}</div><h4>${escapeHtml(p.title)}</h4><p>${escapeHtml(p.body)}</p>${userNotesBlock(p)}</div></div><div class="relation-row">${linkedIdeaButton(idea)}<button class="link-btn" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}">Tasks: ${tasks.length}${active ? ` · active: ${escapeHtml(active.title)}` : ''}</button></div></div>`;
+}
 function renderProjects() {
   const root = $('#project-list');
+  const archive = $('#project-archive-list');
+  const query = ($('#project-archive-search')?.value || '').trim().toLowerCase();
   const projectRank = p => ({ active:0, planning:1, draft:2, maintenance:3, done:4, archived:5 }[p.status] ?? 6);
   const projects = [...state.projects].sort((a,b) => projectRank(a) - projectRank(b) || a.title.localeCompare(b.title));
-  root.innerHTML = projects.length ? projects.map(p => {
-    const tasks = tasksForProject(p);
-    const active = tasks.find(t => t.status === 'open') || tasks[0];
-    const idea = ideaForProject(p);
-    return `<div class="item ${p.status === 'archived' ? 'archived-project' : ''}" data-project="${escapeHtml(p.id)}" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}"><div class="item-top"><div><div class="pill-row">${pill(p.status,'blue')} ${pill(p.status,statusClass(p.status))}</div><h4>${escapeHtml(p.title)}</h4><p>${escapeHtml(p.body)}</p>${userNotesBlock(p)}</div></div><div class="relation-row">${linkedIdeaButton(idea)}<button class="link-btn" data-action="open-project-tasks" data-id="${escapeHtml(p.id)}">Tasks: ${tasks.length}${active ? ` · active: ${escapeHtml(active.title)}` : ''}</button></div></div>`;
-  }).join('') : '<div class="empty">Nothing here yet</div>';
+  const activeProjects = projects.filter(p => p.status !== 'archived');
+  const archivedProjects = projects.filter(p => p.status === 'archived' && (!query || `${p.title || ''} ${p.body || ''} ${p.user_notes || ''}`.toLowerCase().includes(query)));
+  root.innerHTML = activeProjects.length ? activeProjects.map(projectCard).join('') : '<div class="empty">No active projects.</div>';
+  if (archive) archive.innerHTML = archivedProjects.length ? archivedProjects.map(projectCard).join('') : '<div class="empty">No archived projects match.</div>';
 }
 function taskRunClass(status) { return ['done'].includes(status) ? 'good' : ['failed'].includes(status) ? 'bad' : ['queued','scheduled','running'].includes(status) ? 'warn' : 'blue'; }
 function taskActionButtons(t) {
@@ -994,7 +1000,7 @@ const titles = {inbox:['Inbox','Items that need Vadim’s decision now: approval
 $$('.nav-btn').forEach(btn => btn.onclick = () => showView(btn.dataset.view));
 $$('[data-theme-btn]').forEach(btn => btn.onclick = () => { setTheme(btn.dataset.themeBtn); renderAll(); });
 $$('[data-task-filter]').forEach(btn => btn.onclick = () => { taskFilter = btn.dataset.taskFilter || 'open'; renderTasks(); });
-document.addEventListener('input', (event) => { if (event.target?.id === 'idea-archive-search') renderIdeas(); });
+document.addEventListener('input', (event) => { if (event.target?.id === 'idea-archive-search') renderIdeas(); if (event.target?.id === 'project-archive-search') renderProjects(); });
 $('#reset-demo').onclick = () => { if (confirm('Reset demo data?')) resetDemo().catch(err => alert(err.message)); };
 $('#new-idea').onclick = captureIdea;
 $('#review-inbox').onclick = () => showView('inbox');
