@@ -646,9 +646,19 @@ function simpleList(id, rows, type) {
   const el = document.getElementById(id);
   el.innerHTML = rows.length ? rows.map(r => `<div class="item"><div class="item-top"><div><div class="pill-row">${pill(r[1] || type,'blue')} ${pill(r[2] || '', statusClass(r[2]))}</div><h4>${escapeHtml(r[0])}</h4><p>${escapeHtml(r[3] || '')}</p></div></div></div>`).join('') : '<div class="empty">Nothing here yet</div>';
 }
-function taskNeedsInbox(t) {
+function pendingTaskConfirmationIds() {
+  return new Set(state.approvals
+    .filter(a => a.status === 'pending' && a.kind === 'task_done_confirmation')
+    .map(a => {
+      try { return JSON.parse(a.payload_json || '{}').task_id || ''; }
+      catch { return ''; }
+    })
+    .filter(Boolean));
+}
+function taskNeedsInbox(t, pendingConfirmations = pendingTaskConfirmationIds()) {
   const run = t.run_status || 'idle';
   if (['confirmed','cancelled'].includes(t.status)) return false;
+  if (pendingConfirmations.has(t.id)) return false;
   if (t.status === 'done' || run === 'done') return true;
   if (run === 'failed' || t.status === 'waiting') return true;
   return false;
@@ -657,7 +667,7 @@ function inboxItems() {
   return [
     ...state.approvals.map(a => ({ type:'approval', item:a, rank:0 })),
     ...state.ideas.filter(i => i.status === 'review').map(i => ({ type:'idea', item:i, rank:1 })),
-    ...state.tasks.filter(taskNeedsInbox).map(t => ({ type:'task', item:t, rank: t.status === 'done' || t.run_status === 'done' ? 2 : 3 })),
+    ...state.tasks.filter(t => taskNeedsInbox(t)).map(t => ({ type:'task', item:t, rank: t.status === 'done' || t.run_status === 'done' ? 2 : 3 })),
   ].sort((a,b) => a.rank - b.rank || (b.item.updated_at || b.item.created_at || '').localeCompare(a.item.updated_at || a.item.created_at || ''));
 }
 function renderInbox() {
