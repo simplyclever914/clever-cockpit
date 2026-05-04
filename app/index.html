@@ -530,6 +530,20 @@ function projectForTask(task) {
 function ideaForProject(project) { return project?.source_idea_id ? state.ideas.find(i => i.id === project.source_idea_id) : null; }
 function linkedProjectButton(project, text='Open project') { return project ? `<button class="link-btn" data-action="open-project" data-id="${escapeHtml(project.id)}">${escapeHtml(text)}: ${escapeHtml(project.title)}</button>` : '<span class="pill blue">no linked project yet</span>'; }
 function linkedIdeaButton(idea) { return idea ? `<button class="link-btn" data-action="open-idea" data-id="${escapeHtml(idea.id)}">Source idea: ${escapeHtml(idea.title)}</button>` : ''; }
+function explicitLinkedTaskIds(task) {
+  const text = `${task.user_notes || ''}
+${task.body || ''}`;
+  const ids = [...text.matchAll(/`([^`]+)`/g)].map(m => m[1]);
+  return ids.filter(id => id && id !== task.id && state.tasks.some(t => t.id === id));
+}
+function linkedTaskButtonsForTask(task) {
+  const ids = explicitLinkedTaskIds(task);
+  if (!ids.length) return '';
+  return `<div class="relation-row"><span>Follow-up:</span>${ids.map(id => {
+    const t = state.tasks.find(x => x.id === id);
+    return `<button class="link-btn" data-action="open-task" data-id="${escapeHtml(id)}">${escapeHtml(t?.title || id)}</button>`;
+  }).join('')}</div>`;
+}
 function taskButtons(tasks, projectId='') { return tasks.length ? tasks.map((t, idx) => `<button class="link-btn" data-action="open-task" data-id="${escapeHtml(t.id)}" data-project="${escapeHtml(projectId)}">${idx === 0 ? 'Active task' : 'Task'}: ${escapeHtml(t.title)}</button>`).join('') : '<span class="pill blue">no linked tasks yet</span>'; }
 
 function renderLegends() {
@@ -734,7 +748,7 @@ function renderTasks() {
     const project = projectForTask(t);
     const scheduled = t.scheduled_for ? `<span>Scheduled: ${formatTime(t.scheduled_for)}</span>` : '';
     const runningClass = (t.run_status || 'idle') === 'running' ? ' running-task' : '';
-    return `<div class="item${runningClass}" data-task="${escapeHtml(t.id)}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="item-top"><div><div class="pill-row">${pill(t.project || 'project','blue')} ${pill(t.status || '', statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))}</div><h4>${escapeHtml(t.title)}</h4>${taskDescription(t)}${userNotesBlock(t)}${taskBlocker(t)}</div></div><div class="relation-row"><span>Project:</span>${linkedProjectButton(project, 'Open')} ${scheduled}</div>${taskActionButtons(t)}</div>`;
+    return `<div class="item${runningClass}" data-task="${escapeHtml(t.id)}" data-action="open-task" data-id="${escapeHtml(t.id)}"><div class="item-top"><div><div class="pill-row">${pill(t.project || 'project','blue')} ${pill(t.status || '', statusClass(t.status))} ${pill(t.trigger || 'manual','blue')} ${pill(t.run_status || 'idle', taskRunClass(t.run_status || 'idle'))}</div><h4>${escapeHtml(t.title)}</h4>${taskDescription(t)}${userNotesBlock(t)}${taskBlocker(t)}${linkedTaskButtonsForTask(t)}</div></div><div class="relation-row"><span>Project:</span>${linkedProjectButton(project, 'Open')} ${scheduled}</div>${taskActionButtons(t)}</div>`;
   }).join('') : `<div class="empty">No ${escapeHtml(taskFilter)} tasks</div>`;
 }
 function formatTime(value) {
@@ -914,7 +928,7 @@ function openTaskDrawer(id) {
   const task = state.tasks.find(t => t.id === id); if (!task) return;
   const project = projectForTask(task);
   const runMeta = `${task.scheduled_for ? `<div>Scheduled for</div><div>${formatTime(task.scheduled_for)}</div>` : ''}${task.last_run_at ? `<div>Last run</div><div>${formatTime(task.last_run_at)}</div>` : ''}${task.last_error ? `<div>Блокер / последняя ошибка</div><div>${escapeHtml(task.last_error)}</div>` : ''}`;
-  openDrawer(`${drawerHead(task.title, 'Детали задачи')}<div class="pill-row">${pill(task.status, statusClass(task.status))} ${pill(task.trigger || 'manual','blue')} ${pill(task.run_status || 'idle', taskRunClass(task.run_status || 'idle'))}</div>${userNotesBlock(task)}${taskBlocker(task)}<div class="drawer-card"><h4>Описание</h4><p>${escapeHtml(task.body || 'Описание задачи ещё не задано.')}</p></div><form class="edit-form" data-task-edit="${escapeHtml(task.id)}"><label>Название<input name="title" value="${escapeHtml(task.title)}" required></label><label>Описание<textarea name="body" required>${escapeHtml(task.body || '')}</textarea><p class="form-hint">Нужно сохранить результат, объём и критерий готовности — иначе задача быстро снова станет мутной.</p></label><label>Замечания Вадима<textarea name="user_notes" placeholder="Уточнения/поправки, которые runner обязан учесть">${escapeHtml(task.user_notes || '')}</textarea></label><label>Статус<select name="status">${taskStatusOptions(task.status || 'open')}</select></label><div class="item-actions"><button class="btn primary" type="button" data-action="task-save" data-id="${escapeHtml(task.id)}">Сохранить</button></div></form><div class="drawer-section"><h4>Run metadata</h4><div class="kv"><div>Trigger</div><div>${escapeHtml(task.trigger || 'manual')}</div><div>Run status</div><div>${escapeHtml(task.run_status || 'idle')}</div>${runMeta}</div></div><div class="drawer-section"><h4>Execution</h4>${taskActionButtons(task)}</div><div class="drawer-section"><h4>Project</h4><div class="relation-row">${linkedProjectButton(project)}</div></div>${project ? `<div class="drawer-section"><button class="btn primary" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}" data-task="${escapeHtml(task.id)}">Открыть список задач проекта с подсветкой этой задачи</button></div>` : ''}`);
+  openDrawer(`${drawerHead(task.title, 'Детали задачи')}<div class="pill-row">${pill(task.status, statusClass(task.status))} ${pill(task.trigger || 'manual','blue')} ${pill(task.run_status || 'idle', taskRunClass(task.run_status || 'idle'))}</div>${userNotesBlock(task)}${taskBlocker(task)}${linkedTaskButtonsForTask(task)}<div class="drawer-card"><h4>Описание</h4><p>${escapeHtml(task.body || 'Описание задачи ещё не задано.')}</p></div><form class="edit-form" data-task-edit="${escapeHtml(task.id)}"><label>Название<input name="title" value="${escapeHtml(task.title)}" required></label><label>Описание<textarea name="body" required>${escapeHtml(task.body || '')}</textarea><p class="form-hint">Нужно сохранить результат, объём и критерий готовности — иначе задача быстро снова станет мутной.</p></label><label>Замечания Вадима<textarea name="user_notes" placeholder="Уточнения/поправки, которые runner обязан учесть">${escapeHtml(task.user_notes || '')}</textarea></label><label>Статус<select name="status">${taskStatusOptions(task.status || 'open')}</select></label><div class="item-actions"><button class="btn primary" type="button" data-action="task-save" data-id="${escapeHtml(task.id)}">Сохранить</button></div></form><div class="drawer-section"><h4>Run metadata</h4><div class="kv"><div>Trigger</div><div>${escapeHtml(task.trigger || 'manual')}</div><div>Run status</div><div>${escapeHtml(task.run_status || 'idle')}</div>${runMeta}</div></div><div class="drawer-section"><h4>Execution</h4>${taskActionButtons(task)}</div><div class="drawer-section"><h4>Project</h4><div class="relation-row">${linkedProjectButton(project)}</div></div>${project ? `<div class="drawer-section"><button class="btn primary" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}" data-task="${escapeHtml(task.id)}">Открыть список задач проекта с подсветкой этой задачи</button></div>` : ''}`);
 }
 function showView(v) {
   $$('.nav-btn').forEach(b => b.classList.remove('active'));
