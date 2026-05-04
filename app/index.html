@@ -273,7 +273,7 @@
         <div class="kanban"><div class="card lane"><h3>Captured</h3><div id="ideas-proposed"></div></div><div class="card lane"><h3>Needs decision</h3><div id="ideas-review"></div></div><div class="card lane"><h3>Converted</h3><div id="ideas-approved"></div></div><div class="card lane"><h3>Done / parked</h3><div id="ideas-done"></div></div></div>
       </section>
       <section id="view-projects" class="view hidden"><div class="grid content-grid"><div class="card panel"><div class="panel-head"><h3>Projects from approved ideas</h3><button class="btn primary">+ New project</button></div><div id="legend-projects"></div><div id="project-list"></div></div><div class="card panel detail"><div class="preview"><h3>Project rule</h3><p>Approved idea should become a project only if it has owner, outcome, next task, and review date.</p><div class="kv"><div>Example</div><div>Clever Cockpit</div><div>Outcome</div><div>Не терять идеи/задачи из чата</div><div>Next</div><div>Create local datastore + add Telegram capture command</div></div></div></div></div></section>
-      <section id="view-tasks" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Задачи</h3><div class="tabs"><button class="tab active" data-task-filter="open">Открытые</button><button class="tab" data-task-filter="waiting">В работе / очередь / ожидание</button><button class="tab" data-task-filter="done">Готово</button></div></div><div id="legend-tasks"></div><div id="task-list"></div></div></section>
+      <section id="view-tasks" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Задачи</h3><div class="tabs"><button class="tab active" data-task-filter="open">Ready / open</button><button class="tab" data-task-filter="stale">Open/idle triage</button><button class="tab" data-task-filter="waiting">В работе / очередь / ожидание</button><button class="tab" data-task-filter="done">Готово</button></div></div><div id="legend-tasks"></div><div id="task-list"></div></div></section>
       <section id="view-workflow" class="view hidden">
         <div class="workflow-grid">
           <div class="card panel workflow-map">
@@ -734,9 +734,11 @@ function taskStatusOptions(status='open') {
 }
 function taskMatchesFilter(t) {
   const run = t.run_status || 'idle';
+  const openIdle = t.status === 'open' && run === 'idle';
   if (taskFilter === 'done') return ['done','confirmed','cancelled'].includes(t.status) || run === 'done';
   if (taskFilter === 'waiting') return ['waiting','scheduled'].includes(t.status) || ['queued','scheduled','running','failed'].includes(run);
-  return !['done','confirmed','cancelled','waiting','scheduled'].includes(t.status) && !['queued','scheduled','running','failed','done'].includes(run);
+  if (taskFilter === 'stale') return openIdle;
+  return !openIdle && !['done','confirmed','cancelled','waiting','scheduled'].includes(t.status) && !['queued','scheduled','running','failed','done'].includes(run);
 }
 function renderTaskTabs() {
   $$('#view-tasks .tab').forEach(tab => tab.classList.toggle('active', tab.dataset.taskFilter === taskFilter));
