@@ -719,9 +719,14 @@ function renderIdeas() {
   const archiveSearch = ($('#idea-archive-search')?.value || '').trim().toLowerCase();
   if (archive) archive.innerHTML = '';
   state.ideas.forEach(idea => {
-    if (['done','parked'].includes(idea.status)) {
+    const project = projectForIdea(idea);
+    const tasks = tasksForProject(project);
+    const hasLiveTask = tasks.some(t => !['done','confirmed','cancelled'].includes(t.status) && !['done'].includes(t.run_status || 'idle'));
+    const hasLiveProject = project && !['archived','done','cancelled'].includes(project.status) && (project.status !== 'draft' || hasLiveTask);
+    const staleConverted = ['approved','active'].includes(idea.status) && !hasLiveTask && !hasLiveProject;
+    if (['done','parked'].includes(idea.status) || staleConverted) {
       const haystack = `${idea.title || ''} ${idea.body || ''} ${idea.user_notes || ''}`.toLowerCase();
-      if (!archiveSearch || haystack.includes(archiveSearch)) archive?.insertAdjacentHTML('beforeend', ideaCard(idea));
+      if (!archiveSearch || haystack.includes(archiveSearch)) archive?.insertAdjacentHTML('beforeend', ideaCard({ ...idea, status: staleConverted ? 'done' : idea.status }));
       return;
     }
     const lane = lanes[idea.status] || lanes.approved;

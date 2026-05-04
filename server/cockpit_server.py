@@ -433,6 +433,25 @@ def validate_task_description(body: str) -> None:
             raise ValueError(TASK_DESCRIPTION_ERROR)
 
 
+def infer_source_idea_id(conn: sqlite3.Connection, project: str, explicit: str | None = None) -> str | None:
+    explicit = (explicit or "").strip()
+    if explicit:
+        exists = conn.execute("select 1 from ideas where id=?", (explicit,)).fetchone()
+        if not exists:
+            raise ValueError(f"source_idea_id does not exist: {explicit}")
+        return explicit
+    project = (project or "").strip()
+    if not project or project == "Inbox":
+        return None
+    project_row = conn.execute("select source_idea_id from projects where title=? or id=? order by updated_at desc limit 1", (project, project)).fetchone()
+    if project_row and project_row["source_idea_id"]:
+        return project_row["source_idea_id"]
+    idea_row = conn.execute("select id from ideas where title=? order by updated_at desc limit 1", (project,)).fetchone()
+    if idea_row:
+        return idea_row["id"]
+    return None
+
+
 def create_task(conn: sqlite3.Connection, data: dict) -> dict:
     title = (data.get("title") or "").strip()
     if not title:
@@ -447,7 +466,7 @@ def create_task(conn: sqlite3.Connection, data: dict) -> dict:
     trigger = (data.get("trigger") or "manual").strip() or "manual"
     run_status = (data.get("run_status") or "idle").strip() or "idle"
     user_notes = (data.get("user_notes") or "").strip()
-    source_idea_id = data.get("source_idea_id")
+    source_idea_id = infer_source_idea_id(conn, project, data.get("source_idea_id"))
     t = now()
     conn.execute(
         """
@@ -475,6 +494,7 @@ def update_task(conn: sqlite3.Connection, data: dict) -> dict | None:
     body = (data.get("body") if data.get("body") is not None else row["body"]).strip()
     validate_task_description(body)
     user_notes = (data.get("user_notes") if data.get("user_notes") is not None else row["user_notes"]).strip()
+    source_idea_id = infer_source_idea_id(conn, row["project"], data.get("source_idea_id") if data.get("source_idea_id") is not None else row["source_idea_id"])
     status = (data.get("status") if data.get("status") is not None else row["status"]).strip() or "open"
     if status not in {"open", "waiting", "scheduled", "done", "confirmed", "cancelled"}:
         raise ValueError("status must be open, waiting, scheduled, done, confirmed, or cancelled")
@@ -489,8 +509,8 @@ def update_task(conn: sqlite3.Connection, data: dict) -> dict | None:
     elif status in {"open", "waiting"} and run_status in {"queued", "scheduled", "running", "done"}:
         run_status = "idle"
     conn.execute(
-        "update tasks set title=?, body=?, user_notes=?, status=?, run_status=?, last_run_at=?, last_error=null, updated_at=? where id=?",
-        (title, body, user_notes, status, run_status, last_run_at, t, task_id),
+        "update tasks set title=?, body=?, user_notes=?, source_idea_id=?, status=?, run_status=?, last_run_at=?, last_error=null, updated_at=? where id=?",
+        (title, body, user_notes, source_idea_id, status, run_status, last_run_at, t, task_id),
     )
     add_activity(conn, f"Task edited: {title}", "Updated task title, description, or status from Cockpit UI.", "Task", status)
     conn.commit()
