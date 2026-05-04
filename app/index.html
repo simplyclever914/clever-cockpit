@@ -646,7 +646,7 @@ function renderInbox() {
   const root = $('#inbox-list');
   if (!root) return;
   const cards = inboxItems().map(({ type, item }) => {
-    if (type === 'approval') return `<div class="item" data-approval="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('approval','warn')} ${pill(item.kind,'blue')} ${pill(item.priority,priorityClass(item.priority))} ${item.handler ? pill(item.handler,'blue') : ''} ${item.run_status ? pill(item.run_status,statusClass(item.run_status)) : ''}</div><h4>${escapeHtml(item.title)}</h4><p>${linkifyText(item.body)}</p></div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${escapeHtml(item.id)}">OK</button><button class="btn" data-action="deny" data-id="${escapeHtml(item.id)}">Deny</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(item.id)}">Hold</button><button class="btn" data-action="details" data-id="${escapeHtml(item.id)}">Details</button></div></div>`;
+    if (type === 'approval') return `<div class="item" data-approval="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('approval','warn')} ${pill(item.kind,'blue')} ${pill(item.priority,priorityClass(item.priority))} ${item.handler ? pill(item.handler,'blue') : ''} ${item.run_status ? pill(item.run_status,statusClass(item.run_status)) : ''}</div><h4>${escapeHtml(item.title)}</h4><p>${linkifyText(item.body)}</p></div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${escapeHtml(item.id)}">OK</button><button class="btn" data-action="approve-comment" data-id="${escapeHtml(item.id)}">OK + comment</button><button class="btn" data-action="deny" data-id="${escapeHtml(item.id)}">Deny</button><button class="btn" data-action="deny-comment" data-id="${escapeHtml(item.id)}">Deny + comment</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(item.id)}">Hold</button><button class="btn" data-action="details" data-id="${escapeHtml(item.id)}">Details</button></div></div>`;
     if (type === 'idea') return `<div class="item" data-idea="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('idea','blue')} ${pill(item.status,statusClass(item.status))}</div><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.body)}</p>${userNotesBlock(item)}</div></div><div class="item-actions"><button class="btn primary" data-action="idea-ok" data-id="${escapeHtml(item.id)}">Create project</button><button class="btn" data-action="idea-task" data-id="${escapeHtml(item.id)}">Make task</button><button class="btn" data-action="idea-deny" data-id="${escapeHtml(item.id)}">Park</button><button class="btn" data-action="open-idea" data-id="${escapeHtml(item.id)}">Details</button></div></div>`;
     const done = item.status === 'done' || item.run_status === 'done';
     const blocked = item.run_status === 'failed' || item.status === 'waiting';
@@ -766,16 +766,24 @@ function renderAll() {
   if (!apiAvailable) saveState();
 }
 
-async function decideApproval(id, decision) {
+async function decideApproval(id, decision, comment='') {
   const apiDecision = decision === 'ok' ? 'accepted' : decision === 'hold' ? 'hold' : decision === 'pending' ? 'pending' : 'rejected';
-  if (apiAvailable) { applyApiState(await api('/api/approvals/decide', { id, decision: apiDecision }), { force:true }); return; }
+  if (apiAvailable) { applyApiState(await api('/api/approvals/decide', { id, decision: apiDecision, comment }), { force:true }); return; }
   const approval = state.approvals.find(a => a.id === id) || (state.held_approvals || []).find(a => a.id === id);
   if (!approval) return;
   state.approvals = state.approvals.filter(a => a.id !== id);
   state.held_approvals = (state.held_approvals || []).filter(a => a.id !== id);
   if (decision === 'pending') state.approvals.push({ ...approval, status:'pending' });
-  activity(`${decision === 'ok' ? 'Approved' : decision === 'hold' ? 'Held' : decision === 'pending' ? 'Returned to pending' : 'Denied'}: ${approval.title}`, approval.body, 'Approval', decision === 'ok' ? 'approved' : decision === 'hold' ? 'hold' : decision === 'pending' ? 'pending' : 'rejected', approval.priority);
+  activity(`${decision === 'ok' ? 'Approved' : decision === 'hold' ? 'Held' : decision === 'pending' ? 'Returned to pending' : 'Denied'}: ${approval.title}`, comment || approval.body, 'Approval', decision === 'ok' ? 'approved' : decision === 'hold' ? 'hold' : decision === 'pending' ? 'pending' : 'rejected', approval.priority);
   renderAll();
+}
+async function decideApprovalWithComment(id, decision='ok') {
+  const label = decision === 'deny' ? 'Почему отклонить / что поправить?' : 'Что выбрать или передать Клеверу?';
+  const comment = prompt(label + '\nНапример: стартуем с PR-template checklist, automation позже.');
+  if (comment === null) return;
+  const trimmed = comment.trim();
+  if (!trimmed) { alert('Комментарий нужен, иначе это обычный OK/Deny.'); return; }
+  await decideApproval(id, decision, trimmed);
 }
 async function convertIdea(id, mode) {
   if (apiAvailable) { applyApiState(await api('/api/ideas/transition', { id, action: mode === 'deny' ? 'deny' : mode === 'task' ? 'task' : 'ok' }), { force:true }); return; }
@@ -887,7 +895,7 @@ function openApprovalDrawer(id) {
   const isHeld = approval.status === 'hold';
   const actions = isHeld
     ? `<button class="btn" data-action="unhold-approval" data-id="${escapeHtml(approval.id)}">Return to pending</button>`
-    : `<button class="btn primary" data-action="approve" data-id="${escapeHtml(approval.id)}">OK</button><button class="btn" data-action="deny" data-id="${escapeHtml(approval.id)}">Deny</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(approval.id)}">Hold</button>`;
+    : `<button class="btn primary" data-action="approve" data-id="${escapeHtml(approval.id)}">OK</button><button class="btn" data-action="approve-comment" data-id="${escapeHtml(approval.id)}">OK + comment</button><button class="btn" data-action="deny" data-id="${escapeHtml(approval.id)}">Deny</button><button class="btn" data-action="deny-comment" data-id="${escapeHtml(approval.id)}">Deny + comment</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(approval.id)}">Hold</button>`;
   openDrawer(`${drawerHead(approval.title, isHeld ? 'Отложенное решение' : 'Approval details')}<div class="pill-row">${pill(approval.status || (isHeld ? 'hold' : 'pending'), statusClass(approval.status || 'pending'))} ${pill(approval.kind || 'approval','blue')} ${pill(approval.priority || 'normal', priorityClass(approval.priority))} ${approval.handler ? pill(approval.handler,'blue') : ''} ${approval.run_status ? pill(approval.run_status,statusClass(approval.run_status)) : ''}</div><div class="drawer-card"><h4>Описание</h4><p>${linkifyText(approval.body || 'Описание не задано.')}</p></div><div class="drawer-section"><h4>Execution</h4><div class="kv"><div>Handler</div><div>${escapeHtml(approval.handler || 'record_only')}</div><div>Run</div><div>${escapeHtml(approval.run_status || 'pending')}</div><div>Payload</div><div><code>${escapeHtml(approval.payload_json || '{}')}</code></div></div></div><div class="drawer-section"><h4>Decision</h4><div class="item-actions">${actions}</div></div>`);
 }
 function openProjectDrawer(id, highlightTaskId='') {
@@ -935,7 +943,9 @@ document.addEventListener('click', (event) => {
   event.stopPropagation();
   const { action, id } = btn.dataset;
   if (action === 'approve') decideApproval(id, 'ok').catch(err => alert(err.message));
+  if (action === 'approve-comment') decideApprovalWithComment(id, 'ok').catch(err => alert(err.message));
   if (action === 'deny') decideApproval(id, 'deny').catch(err => alert(err.message));
+  if (action === 'deny-comment') decideApprovalWithComment(id, 'deny').catch(err => alert(err.message));
   if (action === 'hold-approval') decideApproval(id, 'hold').catch(err => alert(err.message));
   if (action === 'unhold-approval') decideApproval(id, 'pending').catch(err => alert(err.message));
   if (action === 'details') openApprovalDrawer(id);

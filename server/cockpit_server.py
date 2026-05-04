@@ -589,17 +589,35 @@ class Handler(SimpleHTTPRequestHandler):
                 elif parsed.path == "/api/approvals/decide":
                     approval_id = data["id"]
                     decision = data.get("decision", "accepted")
+                    comment = (data.get("comment") or "").strip()
                     if decision not in {"accepted", "rejected", "hold", "pending"}:
                         self.send_json({"error": "invalid approval decision"}, 400); return
                     row = conn.execute("select * from approvals where id=?", (approval_id,)).fetchone()
                     if not row:
                         self.send_json({"error": "approval not found"}, 404); return
+                    t_now = now()
                     run_status = "queued" if decision == "accepted" else None
+                    body = row["body"] or ""
+                    if comment:
+                        body = (body + f"\n\nКомментарий Вадима ({t_now}):\n{comment}").strip()
                     conn.execute(
-                        "update approvals set status=?, run_status=?, claimed_at=null, completed_at=null, last_error=null, updated_at=? where id=?",
-                        (decision, run_status, now(), approval_id),
+                        "update approvals set status=?, run_status=?, body=?, claimed_at=null, completed_at=null, last_error=null, updated_at=? where id=?",
+                        (decision, run_status, body, t_now, approval_id),
                     )
-                    add_activity(conn, f"Approval {decision}: {row['title']}", row["body"], "Approval", decision, row["priority"])
+                    # For task-attention inbox items, an accepted comment means: send the linked task back to Clever with this instruction.
+                    if decision == "accepted" and comment and row["kind"] == "task_attention":
+                        try:
+                            payload = json.loads(row["payload_json"] or "{}")
+                        except json.JSONDecodeError:
+                            payload = {}
+                        task_id = (payload.get("task_id") or "").strip() if isinstance(payload, dict) else ""
+                        if task_id:
+                            task = conn.execute("select * from tasks where id=?", (task_id,)).fetchone()
+                            if task:
+                                notes = ((task["user_notes"] or "") + f"\n\nVadim follow-up comment ({t_now}): {comment}").strip()
+                                conn.execute("update tasks set status='waiting', trigger='manual', run_status='queued', scheduled_for=null, last_error=null, user_notes=?, updated_at=? where id=?", (notes, t_now, task_id))
+                                add_activity(conn, f"Task sent back from Inbox: {task['title']}", comment, "Task", "queued", "high")
+                    add_activity(conn, f"Approval {decision}: {row['title']}", comment or body, "Approval", decision, row["priority"])
                     conn.commit()
                 elif parsed.path == "/api/approvals/complete":
                     approval_id = data["id"]
