@@ -668,7 +668,7 @@ function taskNeedsInbox(t, pendingConfirmations = pendingTaskConfirmationIds()) 
 function inboxItems() {
   return [
     ...state.approvals.map(a => ({ type:'approval', item:a, rank:0 })),
-    ...state.ideas.filter(i => i.status === 'review').map(i => ({ type:'idea', item:i, rank:1 })),
+    ...state.ideas.filter(i => ['proposed','review'].includes(i.status)).map(i => ({ type:'idea', item:i, rank:1 })),
     ...state.tasks.filter(t => taskNeedsInbox(t)).map(t => ({ type:'task', item:t, rank: t.status === 'done' || t.run_status === 'done' ? 2 : (t.status === 'open' && (t.run_status || 'idle') === 'idle' ? 4 : 3) })),
   ].sort((a,b) => a.rank - b.rank || (b.item.updated_at || b.item.created_at || '').localeCompare(a.item.updated_at || a.item.created_at || ''));
 }
@@ -677,7 +677,7 @@ function renderInbox() {
   if (!root) return;
   const cards = inboxItems().map(({ type, item }) => {
     if (type === 'approval') return `<div class="item" data-approval="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('approval','warn')} ${pill(item.kind,'blue')} ${pill(item.priority,priorityClass(item.priority))} ${item.handler ? pill(item.handler,'blue') : ''} ${item.run_status ? pill(item.run_status,statusClass(item.run_status)) : ''}</div><h4>${escapeHtml(item.title)}</h4><p>${linkifyText(item.body)}</p>${approvalCommentBox(item.id)}</div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${escapeHtml(item.id)}">OK</button><button class="btn" data-action="deny" data-id="${escapeHtml(item.id)}">Deny</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(item.id)}">Hold</button><button class="btn" data-action="details" data-id="${escapeHtml(item.id)}">Details</button></div></div>`;
-    if (type === 'idea') return `<div class="item" data-idea="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('idea','blue')} ${pill(item.status,statusClass(item.status))}</div><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.body)}</p>${userNotesBlock(item)}</div></div><div class="item-actions"><button class="btn primary" data-action="idea-task" data-id="${escapeHtml(item.id)}">Make task</button><button class="btn" data-action="idea-ok" data-id="${escapeHtml(item.id)}">Make project draft</button><button class="btn" data-action="idea-deny" data-id="${escapeHtml(item.id)}">Park</button><button class="btn" data-action="open-idea" data-id="${escapeHtml(item.id)}">Details</button></div></div>`;
+    if (type === 'idea') return `<div class="item" data-idea="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('idea triage','blue')} ${pill(item.status,statusClass(item.status))}</div><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.body)}</p>${userNotesBlock(item)}</div></div><div class="item-actions"><button class="btn primary" data-action="idea-task" data-id="${escapeHtml(item.id)}">Make task</button><button class="btn" data-action="idea-deny" data-id="${escapeHtml(item.id)}">Park</button><button class="btn" data-action="idea-dismiss" data-id="${escapeHtml(item.id)}">Dismiss</button><button class="btn" data-action="open-idea" data-id="${escapeHtml(item.id)}">Details</button></div></div>`;
     const done = item.status === 'done' || item.run_status === 'done';
     const blocked = item.run_status === 'failed' || item.status === 'waiting';
     const actions = done
@@ -810,13 +810,13 @@ async function decideApproval(id, decision, comment='') {
   renderAll();
 }
 async function convertIdea(id, mode) {
-  if (apiAvailable) { applyApiState(await api('/api/ideas/transition', { id, action: mode === 'deny' ? 'deny' : mode === 'task' ? 'task' : 'ok' }), { force:true }); return; }
+  if (apiAvailable) { applyApiState(await api('/api/ideas/transition', { id, action: mode === 'dismiss' ? 'dismiss' : mode === 'deny' ? 'deny' : mode === 'task' ? 'task' : 'ok' }), { force:true }); return; }
   const idea = state.ideas.find(i => i.id === id);
   if (!idea) return;
-  if (mode === 'deny') {
-    idea.status = 'done';
-    idea.body += ' · Parked with reason: not now / not worth current focus.';
-    activity(`Parked idea: ${idea.title}`, idea.body, 'Idea', 'done', 'normal');
+  if (mode === 'deny' || mode === 'dismiss') {
+    idea.status = mode === 'dismiss' ? 'done' : 'parked';
+    idea.body += mode === 'dismiss' ? ' · Dismissed as not worth tracking.' : ' · Parked with reason: not now / not worth current focus.';
+    activity(`${mode === 'dismiss' ? 'Dismissed' : 'Parked'} idea: ${idea.title}`, idea.body, 'Idea', idea.status, 'normal');
   } else {
     idea.status = 'approved';
     const projectId = slugify(idea.title);
@@ -954,7 +954,7 @@ function showView(v) {
   $('#view-desc').textContent = titles[v][1];
 }
 
-const titles = {inbox:['Inbox','Only items that need Vadim’s decision now: explicit approvals, task attention/blockers, and completed-task confirmation. Raw captured ideas stay in Ideas.'],ideas:['Ideas','Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.'],projects:['Projects','Approved ideas grouped into outcomes with owners, next tasks, and review dates.'],tasks:['Tasks','Concrete next actions created from ideas, projects, digests, and operational work.'],workflow:['Workflow','The lifecycle that connects ideas, decisions, draft projects, tasks, approvals, schedules, and activity feedback.'],activity:['Activity','Chronological event log: runs, approvals, idea transitions, publications, errors, and outcomes.'],schedules:['Schedules','Configured OpenClaw cron activities with last run, next run, and last execution status.'],artifacts:['Artifacts','Digest drafts, SourceCraft pages, generated reports, scripts, and compareable outputs.'],runs:['Runs','Subagents, background commands, last success and logs.'],health:['Health','Freshness checks, sync state, publish checks, and operational risks.']};
+const titles = {inbox:['Inbox','Items that need Vadim’s decision now: approvals, task actions/blockers/confirmations, and captured idea triage.'],ideas:['Ideas','Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.'],projects:['Projects','Approved ideas grouped into outcomes with owners, next tasks, and review dates.'],tasks:['Tasks','Concrete next actions created from ideas, projects, digests, and operational work.'],workflow:['Workflow','The lifecycle that connects ideas, decisions, draft projects, tasks, approvals, schedules, and activity feedback.'],activity:['Activity','Chronological event log: runs, approvals, idea transitions, publications, errors, and outcomes.'],schedules:['Schedules','Configured OpenClaw cron activities with last run, next run, and last execution status.'],artifacts:['Artifacts','Digest drafts, SourceCraft pages, generated reports, scripts, and compareable outputs.'],runs:['Runs','Subagents, background commands, last success and logs.'],health:['Health','Freshness checks, sync state, publish checks, and operational risks.']};
 
 $$('.nav-btn').forEach(btn => btn.onclick = () => showView(btn.dataset.view));
 $$('[data-theme-btn]').forEach(btn => btn.onclick = () => { setTheme(btn.dataset.themeBtn); renderAll(); });
@@ -980,6 +980,7 @@ document.addEventListener('click', (event) => {
   if (action === 'details') openApprovalDrawer(id);
   if (action === 'idea-ok') convertIdea(id, 'ok').catch(err => alert(err.message));
   if (action === 'idea-deny') convertIdea(id, 'deny').catch(err => alert(err.message));
+  if (action === 'idea-dismiss') convertIdea(id, 'dismiss').catch(err => alert(err.message));
   if (action === 'idea-task') convertIdea(id, 'task').catch(err => alert(err.message));
   if (action === 'open-idea') openIdeaDrawer(id);
   if (action === 'open-project') openProjectDrawer(id);

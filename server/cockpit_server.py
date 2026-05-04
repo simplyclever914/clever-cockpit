@@ -700,9 +700,11 @@ class Handler(SimpleHTTPRequestHandler):
                     if not idea:
                         self.send_json({"error": "idea not found"}, 404); return
                     t = now()
-                    if action == "deny":
-                        conn.execute("update ideas set status='done', updated_at=? where id=?", (t, idea_id))
-                        add_activity(conn, f"Parked idea: {idea['title']}", idea["body"], "Idea", "done")
+                    if action in {"deny", "dismiss"}:
+                        status = "done" if action == "dismiss" else "parked"
+                        title_prefix = "Dismissed" if action == "dismiss" else "Parked"
+                        conn.execute("update ideas set status=?, updated_at=? where id=?", (status, t, idea_id))
+                        add_activity(conn, f"{title_prefix} idea: {idea['title']}", idea["body"], "Idea", status)
                     else:
                         conn.execute("update ideas set status='approved', updated_at=? where id=?", (t, idea_id))
                         project_id = slugify(idea["title"])
