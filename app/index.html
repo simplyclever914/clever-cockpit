@@ -563,20 +563,24 @@ function renderLegends() {
   Object.entries(legends).forEach(([id, items]) => { const el = document.getElementById(id); if (el) el.innerHTML = legend(items); });
 }
 
+function isClosedStatus(status) {
+  return ['done','confirmed','cancelled','rejected','archived','parked','published'].includes(status || '');
+}
 function renderCounts() {
   const pending = inboxItems().length;
-  const ideas = state.ideas.length;
-  const tasks = state.tasks.length;
+  const ideas = state.ideas.filter(i => !['done','parked'].includes(i.status)).length;
+  const tasks = state.tasks.filter(t => !['done','confirmed','cancelled'].includes(t.status)).length;
   const projects = state.projects.filter(p => p.status !== 'archived').length;
+  const activeActivity = state.activity.filter(a => !isClosedStatus(a.status)).length;
   const needDecision = state.ideas.filter(i => ['proposed','review'].includes(i.status)).length;
-  const converted = state.ideas.filter(i => i.status === 'approved').length;
-  const parked = state.ideas.filter(i => i.status === 'done').length;
+  const converted = state.ideas.filter(i => ['approved','active'].includes(i.status)).length;
+  const parked = state.ideas.filter(i => ['done','parked'].includes(i.status)).length;
 
   setBadge('inbox', pending, true);
   setBadge('ideas', ideas);
   setBadge('projects', projects);
   setBadge('tasks', tasks);
-  setBadge('activity', state.activity.length);
+  setBadge('activity', activeActivity);
   setBadge('schedules', (state.schedules || []).length);
 
   const navApproval = $('[data-view="inbox"]');
