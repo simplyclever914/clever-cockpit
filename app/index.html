@@ -270,7 +270,7 @@
           <div class="card stat"><span>Captured ideas</span><b>8</b></div><div class="card stat"><span>Need decision</span><b>3</b></div><div class="card stat"><span>Converted to tasks</span><b>4</b></div><div class="card stat"><span>Parked</span><b>1</b></div>
         </div>
         <div class="card panel" style="margin-bottom:16px"><div class="panel-head"><h3>Idea intake</h3><button class="btn primary">+ Capture from chat</button></div><p style="color:var(--muted);margin-top:0">Каждая понравившаяся идея получает следующий шаг: <b>convert to project</b>, <b>create tasks</b>, <b>schedule review</b>, или <b>park with reason</b>. Никаких “надо бы потом”.</p><div id="legend-ideas"></div></div>
-        <div class="kanban"><div class="card lane"><h3>Captured</h3><div id="ideas-proposed"></div></div><div class="card lane"><h3>Needs decision</h3><div id="ideas-review"></div></div><div class="card lane"><h3>Converted</h3><div id="ideas-approved"></div></div><div class="card lane"><h3>Done / parked</h3><div id="ideas-done"></div></div></div>
+        <div class="kanban"><div class="card lane"><h3>Captured</h3><div id="ideas-proposed"></div></div><div class="card lane"><h3>Needs decision</h3><div id="ideas-review"></div></div><div class="card lane"><h3>Converted</h3><div id="ideas-approved"></div></div></div><details class="card panel" id="ideas-archive-panel"><summary style="cursor:pointer;font-weight:800">Archive: done / parked ideas</summary><p style="color:var(--muted);margin-top:10px">Закрытые идеи не занимают основной поток. Используй поиск, если нужно поднять старое решение.</p><input id="idea-archive-search" placeholder="Search archived ideas…" style="width:100%;border:1px solid var(--border2);border-radius:13px;background:var(--glass2);color:var(--text);padding:10px 12px;margin-bottom:12px"><div id="ideas-done"></div></details>
       </section>
       <section id="view-projects" class="view hidden"><div class="grid content-grid"><div class="card panel"><div class="panel-head"><h3>Projects from approved ideas</h3><button class="btn primary">+ New project</button></div><div id="legend-projects"></div><div id="project-list"></div></div><div class="card panel detail"><div class="preview"><h3>Project rule</h3><p>Approved idea should become a project only if it has owner, outcome, next task, and review date.</p><div class="kv"><div>Example</div><div>Clever Cockpit</div><div>Outcome</div><div>Не терять идеи/задачи из чата</div><div>Next</div><div>Create local datastore + add Telegram capture command</div></div></div></div></div></section>
       <section id="view-tasks" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Задачи</h3><div class="tabs"><button class="tab active" data-task-filter="open">Ready / open</button><button class="tab" data-task-filter="stale">Open/idle triage</button><button class="tab" data-task-filter="waiting">В работе / очередь / ожидание</button><button class="tab" data-task-filter="done">Готово</button></div></div><div id="legend-tasks"></div><div id="task-list"></div></div></section>
@@ -695,22 +695,34 @@ function renderInbox() {
   const heldRoot = $('#held-approval-list');
   if (heldRoot) heldRoot.innerHTML = (state.held_approvals || []).length ? state.held_approvals.map(a => `<div class="item" data-approval="${escapeHtml(a.id)}"><div class="item-top"><div><div class="pill-row">${pill('hold','warn')} ${pill(a.kind,'blue')} ${pill(a.priority,priorityClass(a.priority))}</div><h4>${escapeHtml(a.title)}</h4><p>${linkifyText(a.body)}</p></div></div><div class="item-actions"><button class="btn" data-action="unhold-approval" data-id="${escapeHtml(a.id)}">Return to inbox</button><button class="btn" data-action="details" data-id="${escapeHtml(a.id)}">Details</button></div></div>`).join('') : '<div class="empty">Long box is empty.</div>';
 }
+function ideaCard(idea) {
+  const project = projectForIdea(idea);
+  const tasks = tasksForProject(project);
+  const needsAction = ['proposed','review'].includes(idea.status);
+  const converted = ['approved','active'].includes(idea.status);
+  const actions = needsAction
+    ? `<div class="item-actions"><button class="btn primary" data-action="idea-task" data-id="${escapeHtml(idea.id)}">Make task</button><button class="btn" data-action="idea-deny" data-id="${escapeHtml(idea.id)}">Park</button><button class="btn" data-action="idea-dismiss" data-id="${escapeHtml(idea.id)}">Dismiss</button></div>`
+    : `<div class="item-actions">${pill(converted ? 'converted to project/task' : 'archived', converted ? 'good' : 'warn')}</div>`;
+  const relations = `<div class="relation-row"><span>Linked:</span>${linkedProjectButton(project)}${project ? `<button class="link-btn" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}">Tasks: ${tasks.length}</button>` : ''}</div>`;
+  return `<div class="item" data-idea="${escapeHtml(idea.id)}" data-action="open-idea" data-id="${escapeHtml(idea.id)}"><div class="pill-row">${pill(idea.status, statusClass(idea.status))}</div><h4>${escapeHtml(idea.title)}</h4><p>${escapeHtml(idea.body)}</p>${userNotesBlock(idea)}${relations}${actions}</div>`;
+}
 function renderIdeas() {
-  const lanes = { proposed: $('#ideas-proposed'), review: $('#ideas-review'), approved: $('#ideas-approved'), done: $('#ideas-done') };
-  Object.values(lanes).forEach(el => el.innerHTML = '');
+  const lanes = { proposed: $('#ideas-proposed'), review: $('#ideas-review'), approved: $('#ideas-approved') };
+  Object.values(lanes).forEach(el => { if (el) el.innerHTML = ''; });
+  const archive = $('#ideas-done');
+  const archiveSearch = ($('#idea-archive-search')?.value || '').trim().toLowerCase();
+  if (archive) archive.innerHTML = '';
   state.ideas.forEach(idea => {
-    const lane = lanes[idea.status] || lanes.done;
-    const project = projectForIdea(idea);
-    const tasks = tasksForProject(project);
-    const needsAction = ['proposed','review'].includes(idea.status);
-    const converted = idea.status === 'approved';
-    const actions = needsAction
-      ? `<div class="item-actions"><button class="btn primary" data-action="idea-ok" data-id="${idea.id}">OK</button><button class="btn" data-action="idea-deny" data-id="${idea.id}">Deny</button><button class="btn" data-action="idea-task" data-id="${idea.id}">Make task</button></div>`
-      : `<div class="item-actions">${pill(converted ? 'converted to project/task' : 'closed', converted ? 'good' : 'warn')}</div>`;
-    const relations = `<div class="relation-row"><span>Linked:</span>${linkedProjectButton(project)}${project ? `<button class="link-btn" data-action="open-project-tasks" data-id="${escapeHtml(project.id)}">Tasks: ${tasks.length}</button>` : ''}</div>`;
-    lane.insertAdjacentHTML('beforeend', `<div class="item" data-idea="${idea.id}" data-action="open-idea" data-id="${idea.id}"><h4>${escapeHtml(idea.title)}</h4><p>${escapeHtml(idea.body)}</p>${userNotesBlock(idea)}${relations}${actions}</div>`);
+    if (['done','parked'].includes(idea.status)) {
+      const haystack = `${idea.title || ''} ${idea.body || ''} ${idea.user_notes || ''}`.toLowerCase();
+      if (!archiveSearch || haystack.includes(archiveSearch)) archive?.insertAdjacentHTML('beforeend', ideaCard(idea));
+      return;
+    }
+    const lane = lanes[idea.status] || lanes.approved;
+    lane?.insertAdjacentHTML('beforeend', ideaCard(idea));
   });
-  Object.values(lanes).forEach(el => { if (!el.innerHTML.trim()) el.innerHTML = '<div class="empty">Empty</div>'; });
+  Object.values(lanes).forEach(el => { if (el && !el.innerHTML.trim()) el.innerHTML = '<div class="empty">Empty</div>'; });
+  if (archive && !archive.innerHTML.trim()) archive.innerHTML = '<div class="empty">No archived ideas match.</div>';
 }
 function renderProjects() {
   const root = $('#project-list');
@@ -963,6 +975,7 @@ const titles = {inbox:['Inbox','Items that need Vadim’s decision now: approval
 $$('.nav-btn').forEach(btn => btn.onclick = () => showView(btn.dataset.view));
 $$('[data-theme-btn]').forEach(btn => btn.onclick = () => { setTheme(btn.dataset.themeBtn); renderAll(); });
 $$('[data-task-filter]').forEach(btn => btn.onclick = () => { taskFilter = btn.dataset.taskFilter || 'open'; renderTasks(); });
+document.addEventListener('input', (event) => { if (event.target?.id === 'idea-archive-search') renderIdeas(); });
 $('#reset-demo').onclick = () => { if (confirm('Reset demo data?')) resetDemo().catch(err => alert(err.message)); };
 $('#new-idea').onclick = captureIdea;
 $('#review-inbox').onclick = () => showView('inbox');
