@@ -186,6 +186,9 @@
     .edit-form input, .edit-form textarea, .edit-form select { width:100%; border:1px solid var(--border2); border-radius:13px; background:var(--glass2); color:var(--text); padding:10px 12px; outline:none; text-transform:none; letter-spacing:normal; }
     .edit-form textarea { min-height:170px; resize:vertical; line-height:1.45; }
     .edit-form input:focus, .edit-form textarea:focus, .edit-form select:focus { border-color:color-mix(in srgb,var(--accent) 48%,transparent); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent); }
+    .inline-comment { display:block; margin-top:12px; color:var(--muted); font-size:13px; }
+    .inline-comment textarea { width:100%; min-height:72px; margin-top:6px; border:1px solid var(--border2); border-radius:13px; background:var(--glass2); color:var(--text); padding:10px 12px; resize:vertical; outline:none; line-height:1.45; }
+    .inline-comment textarea:focus { border-color:color-mix(in srgb,var(--accent) 48%,transparent); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent); }
     .sync-indicator { position:fixed; right:18px; bottom:18px; z-index:30; max-width:320px; border:1px solid var(--border2); border-radius:999px; background:var(--glass); color:var(--muted); padding:8px 11px; font-size:12px; box-shadow:var(--shadow); backdrop-filter:blur(20px); opacity:0; transform:translateY(8px); pointer-events:none; transition:.18s opacity,.18s transform; }
     .sync-indicator.visible { opacity:1; transform:translateY(0); }
     .sync-indicator.warn { color:var(--warn); border-color:color-mix(in srgb,var(--warn) 38%, transparent); }
@@ -496,6 +499,7 @@ function taskDescription(t, label='Описание') { return `<details class="
 function taskBlocker(t) { return t.last_error ? `<div class="task-blocker"><b>Блокер / последняя ошибка:</b> ${linkifyText(t.last_error)}</div>` : ''; }
 function userNotesBlock(x) { return x?.user_notes ? `<div class="task-blocker"><b>Замечания Вадима:</b> ${linkifyText(x.user_notes)}</div>` : ''; }
 function userNotesForm(type, x) { return `<form class="edit-form" data-notes-edit="${escapeHtml(type)}" data-id="${escapeHtml(x.id)}"><label>Замечания Вадима<textarea name="user_notes" placeholder="Уточнения, поправки, ограничения, что обязательно учесть при реализации">${escapeHtml(x.user_notes || '')}</textarea><p class="form-hint">Эти заметки не заменяют описание: runner обязан учитывать их вместе с идеей/проектом/задачей.</p></label><div class="item-actions"><button class="btn primary" type="button" data-action="notes-save" data-type="${escapeHtml(type)}" data-id="${escapeHtml(x.id)}">Сохранить замечания</button></div></form>`; }
+function approvalCommentBox(id) { return `<label class="inline-comment">Комментарий для Клевера<textarea data-approval-comment="${escapeHtml(id)}" placeholder="Например: выбираю PR-template checklist сейчас; lint/automation позже после 2–3 реальных примеров. Можно написать несколько пунктов."></textarea></label>`; }
 function pill(text, cls='') { return `<span class="pill ${cls}">${escapeHtml(text)}</span>`; }
 function legend(items, title='Legend') {
   return `<div class="legend"><span class="legend-title">${escapeHtml(title)}</span>${items.map(([label, meaning, cls='']) => `<span class="legend-item">${pill(label, cls)} <span>${escapeHtml(meaning)}</span></span>`).join('')}</div>`;
@@ -646,7 +650,7 @@ function renderInbox() {
   const root = $('#inbox-list');
   if (!root) return;
   const cards = inboxItems().map(({ type, item }) => {
-    if (type === 'approval') return `<div class="item" data-approval="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('approval','warn')} ${pill(item.kind,'blue')} ${pill(item.priority,priorityClass(item.priority))} ${item.handler ? pill(item.handler,'blue') : ''} ${item.run_status ? pill(item.run_status,statusClass(item.run_status)) : ''}</div><h4>${escapeHtml(item.title)}</h4><p>${linkifyText(item.body)}</p></div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${escapeHtml(item.id)}">OK</button><button class="btn" data-action="approve-comment" data-id="${escapeHtml(item.id)}">OK + comment</button><button class="btn" data-action="deny" data-id="${escapeHtml(item.id)}">Deny</button><button class="btn" data-action="deny-comment" data-id="${escapeHtml(item.id)}">Deny + comment</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(item.id)}">Hold</button><button class="btn" data-action="details" data-id="${escapeHtml(item.id)}">Details</button></div></div>`;
+    if (type === 'approval') return `<div class="item" data-approval="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('approval','warn')} ${pill(item.kind,'blue')} ${pill(item.priority,priorityClass(item.priority))} ${item.handler ? pill(item.handler,'blue') : ''} ${item.run_status ? pill(item.run_status,statusClass(item.run_status)) : ''}</div><h4>${escapeHtml(item.title)}</h4><p>${linkifyText(item.body)}</p>${approvalCommentBox(item.id)}</div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${escapeHtml(item.id)}">OK</button><button class="btn" data-action="deny" data-id="${escapeHtml(item.id)}">Deny</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(item.id)}">Hold</button><button class="btn" data-action="details" data-id="${escapeHtml(item.id)}">Details</button></div></div>`;
     if (type === 'idea') return `<div class="item" data-idea="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('idea','blue')} ${pill(item.status,statusClass(item.status))}</div><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.body)}</p>${userNotesBlock(item)}</div></div><div class="item-actions"><button class="btn primary" data-action="idea-ok" data-id="${escapeHtml(item.id)}">Create project</button><button class="btn" data-action="idea-task" data-id="${escapeHtml(item.id)}">Make task</button><button class="btn" data-action="idea-deny" data-id="${escapeHtml(item.id)}">Park</button><button class="btn" data-action="open-idea" data-id="${escapeHtml(item.id)}">Details</button></div></div>`;
     const done = item.status === 'done' || item.run_status === 'done';
     const blocked = item.run_status === 'failed' || item.status === 'waiting';
@@ -777,14 +781,6 @@ async function decideApproval(id, decision, comment='') {
   activity(`${decision === 'ok' ? 'Approved' : decision === 'hold' ? 'Held' : decision === 'pending' ? 'Returned to pending' : 'Denied'}: ${approval.title}`, comment || approval.body, 'Approval', decision === 'ok' ? 'approved' : decision === 'hold' ? 'hold' : decision === 'pending' ? 'pending' : 'rejected', approval.priority);
   renderAll();
 }
-async function decideApprovalWithComment(id, decision='ok') {
-  const label = decision === 'deny' ? 'Почему отклонить / что поправить?' : 'Что выбрать или передать Клеверу?';
-  const comment = prompt(label + '\nНапример: стартуем с PR-template checklist, automation позже.');
-  if (comment === null) return;
-  const trimmed = comment.trim();
-  if (!trimmed) { alert('Комментарий нужен, иначе это обычный OK/Deny.'); return; }
-  await decideApproval(id, decision, trimmed);
-}
 async function convertIdea(id, mode) {
   if (apiAvailable) { applyApiState(await api('/api/ideas/transition', { id, action: mode === 'deny' ? 'deny' : mode === 'task' ? 'task' : 'ok' }), { force:true }); return; }
   const idea = state.ideas.find(i => i.id === id);
@@ -895,8 +891,8 @@ function openApprovalDrawer(id) {
   const isHeld = approval.status === 'hold';
   const actions = isHeld
     ? `<button class="btn" data-action="unhold-approval" data-id="${escapeHtml(approval.id)}">Return to pending</button>`
-    : `<button class="btn primary" data-action="approve" data-id="${escapeHtml(approval.id)}">OK</button><button class="btn" data-action="approve-comment" data-id="${escapeHtml(approval.id)}">OK + comment</button><button class="btn" data-action="deny" data-id="${escapeHtml(approval.id)}">Deny</button><button class="btn" data-action="deny-comment" data-id="${escapeHtml(approval.id)}">Deny + comment</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(approval.id)}">Hold</button>`;
-  openDrawer(`${drawerHead(approval.title, isHeld ? 'Отложенное решение' : 'Approval details')}<div class="pill-row">${pill(approval.status || (isHeld ? 'hold' : 'pending'), statusClass(approval.status || 'pending'))} ${pill(approval.kind || 'approval','blue')} ${pill(approval.priority || 'normal', priorityClass(approval.priority))} ${approval.handler ? pill(approval.handler,'blue') : ''} ${approval.run_status ? pill(approval.run_status,statusClass(approval.run_status)) : ''}</div><div class="drawer-card"><h4>Описание</h4><p>${linkifyText(approval.body || 'Описание не задано.')}</p></div><div class="drawer-section"><h4>Execution</h4><div class="kv"><div>Handler</div><div>${escapeHtml(approval.handler || 'record_only')}</div><div>Run</div><div>${escapeHtml(approval.run_status || 'pending')}</div><div>Payload</div><div><code>${escapeHtml(approval.payload_json || '{}')}</code></div></div></div><div class="drawer-section"><h4>Decision</h4><div class="item-actions">${actions}</div></div>`);
+    : `<button class="btn primary" data-action="approve" data-id="${escapeHtml(approval.id)}">OK</button><button class="btn" data-action="deny" data-id="${escapeHtml(approval.id)}">Deny</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(approval.id)}">Hold</button>`;
+  openDrawer(`${drawerHead(approval.title, isHeld ? 'Отложенное решение' : 'Approval details')}<div class="pill-row">${pill(approval.status || (isHeld ? 'hold' : 'pending'), statusClass(approval.status || 'pending'))} ${pill(approval.kind || 'approval','blue')} ${pill(approval.priority || 'normal', priorityClass(approval.priority))} ${approval.handler ? pill(approval.handler,'blue') : ''} ${approval.run_status ? pill(approval.run_status,statusClass(approval.run_status)) : ''}</div><div class="drawer-card"><h4>Описание</h4><p>${linkifyText(approval.body || 'Описание не задано.')}</p>${approvalCommentBox(approval.id)}</div><div class="drawer-section"><h4>Execution</h4><div class="kv"><div>Handler</div><div>${escapeHtml(approval.handler || 'record_only')}</div><div>Run</div><div>${escapeHtml(approval.run_status || 'pending')}</div><div>Payload</div><div><code>${escapeHtml(approval.payload_json || '{}')}</code></div></div></div><div class="drawer-section"><h4>Decision</h4><div class="item-actions">${actions}</div></div>`);
 }
 function openProjectDrawer(id, highlightTaskId='') {
   const project = state.projects.find(p => p.id === id || p.title === id); if (!project) return;
@@ -942,10 +938,10 @@ document.addEventListener('click', (event) => {
   if (!btn) return;
   event.stopPropagation();
   const { action, id } = btn.dataset;
-  if (action === 'approve') decideApproval(id, 'ok').catch(err => alert(err.message));
-  if (action === 'approve-comment') decideApprovalWithComment(id, 'ok').catch(err => alert(err.message));
-  if (action === 'deny') decideApproval(id, 'deny').catch(err => alert(err.message));
-  if (action === 'deny-comment') decideApprovalWithComment(id, 'deny').catch(err => alert(err.message));
+  if (action === 'approve' || action === 'deny') {
+    const box = btn.closest('[data-approval]')?.querySelector('[data-approval-comment]') || document.querySelector(`[data-approval-comment="${CSS.escape(id)}"]`);
+    decideApproval(id, action === 'approve' ? 'ok' : 'deny', box?.value || '').catch(err => alert(err.message));
+  }
   if (action === 'hold-approval') decideApproval(id, 'hold').catch(err => alert(err.message));
   if (action === 'unhold-approval') decideApproval(id, 'pending').catch(err => alert(err.message));
   if (action === 'details') openApprovalDrawer(id);
