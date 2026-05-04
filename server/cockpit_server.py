@@ -605,8 +605,8 @@ class Handler(SimpleHTTPRequestHandler):
                         (decision, run_status, body, t_now, approval_id),
                     )
                     # For task-attention inbox items, an accepted comment means: send the linked task back to Clever with this instruction.
-                    # For task-done confirmations, an accepted comment means: confirmed result + create/queue a follow-up task.
-                    if decision == "accepted" and comment and row["kind"] in {"task_attention", "task_done_confirmation"}:
+                    # For task-done confirmations, OK confirms the task; OK + comment confirms it and creates/queues a follow-up task.
+                    if decision == "accepted" and ((comment and row["kind"] == "task_attention") or row["kind"] == "task_done_confirmation"):
                         try:
                             payload = json.loads(row["payload_json"] or "{}")
                         except json.JSONDecodeError:
@@ -615,21 +615,31 @@ class Handler(SimpleHTTPRequestHandler):
                         if task_id:
                             task = conn.execute("select * from tasks where id=?", (task_id,)).fetchone()
                             if task:
-                                notes = ((task["user_notes"] or "") + f"\n\nVadim follow-up comment ({t_now}): {comment}").strip()
+                                notes = ((task["user_notes"] or "") + (f"\n\nVadim follow-up comment ({t_now}): {comment}" if comment else "")).strip()
                                 if row["kind"] == "task_done_confirmation":
-                                    conn.execute("update tasks set status='confirmed', run_status='done', last_error=null, user_notes=?, updated_at=? where id=?", (notes, t_now, task_id))
-                                    follow_title = f"Follow up: {task['title']}"
-                                    follow_id = f"{slugify(follow_title)}-{secrets.token_hex(3)}"
-                                    follow_body = (
-                                        f"Результат: выполнить следующий шаг после подтверждённой задачи `{task_id}` с учётом комментария Вадима. "
-                                        f"Объём: разобрать исходный отчёт/результат, комментарий Вадима и создать/выполнить конкретные follow-up действия без потери связи с родительской задачей. "
-                                        f"Готово когда: следующий артефакт или набор задач создан, а ссылка на follow-up записана в родительскую карточку.\n\nКомментарий Вадима:\n{comment}"
-                                    )
-                                    if not conn.execute("select 1 from tasks where id=?", (follow_id,)).fetchone():
-                                        conn.execute("insert into tasks(id,title,project,status,body,user_notes,source_idea_id,created_at,updated_at,trigger,run_status) values (?,?,?,?,?,?,?,?,?,?,?)", (follow_id, follow_title, task["project"] or "Inbox", "waiting", follow_body, f"Created automatically from confirmation `{row['id']}` for parent task `{task_id}`.", task["source_idea_id"], t_now, t_now, "manual", "queued"))
-                                        notes_with_link = (notes + f"\n\nFollow-up task: `{follow_id}`").strip()
-                                        conn.execute("update tasks set user_notes=?, updated_at=? where id=?", (notes_with_link, t_now, task_id))
-                                        add_activity(conn, f"Follow-up task created: {follow_title}", follow_body, "Task", "queued", "high")
+                                    target_status = "confirmed"
+                                    try:
+                                        target_status = json.loads(row["payload_json"] or "{}").get("target_status") or "confirmed"
+                                    except json.JSONDecodeError:
+                                        target_status = "confirmed"
+                                    if target_status not in {"confirmed", "done"}:
+                                        target_status = "confirmed"
+                                    conn.execute("update tasks set status=?, run_status='done', last_error=null, user_notes=?, updated_at=? where id=?", (target_status, notes, t_now, task_id))
+                                    conn.execute("update approvals set run_status='done', completed_at=?, last_error=null, updated_at=? where id=?", (t_now, t_now, approval_id))
+                                    add_activity(conn, f"Task confirmed: {task['title']}", comment or "Confirmed by Vadim.", "TaskConfirmation", target_status, "normal")
+                                    if comment:
+                                        follow_title = f"Follow up: {task['title']}"
+                                        follow_id = f"{slugify(follow_title)}-{secrets.token_hex(3)}"
+                                        follow_body = (
+                                            f"Результат: выполнить следующий шаг после подтверждённой задачи `{task_id}` с учётом комментария Вадима. "
+                                            f"Объём: разобрать исходный отчёт/результат, комментарий Вадима и создать/выполнить конкретные follow-up действия без потери связи с родительской задачей. "
+                                            f"Готово когда: следующий артефакт или набор задач создан, а ссылка на follow-up записана в родительскую карточку.\n\nКомментарий Вадима:\n{comment}"
+                                        )
+                                        if not conn.execute("select 1 from tasks where id=?", (follow_id,)).fetchone():
+                                            conn.execute("insert into tasks(id,title,project,status,body,user_notes,source_idea_id,created_at,updated_at,trigger,run_status) values (?,?,?,?,?,?,?,?,?,?,?)", (follow_id, follow_title, task["project"] or "Inbox", "waiting", follow_body, f"Created automatically from confirmation `{row['id']}` for parent task `{task_id}`.", task["source_idea_id"], t_now, t_now, "manual", "queued"))
+                                            notes_with_link = (notes + f"\n\nFollow-up task: `{follow_id}`").strip()
+                                            conn.execute("update tasks set user_notes=?, updated_at=? where id=?", (notes_with_link, t_now, task_id))
+                                            add_activity(conn, f"Follow-up task created: {follow_title}", follow_body, "Task", "queued", "high")
                                 else:
                                     close_re = re.search(r"\b(закрой|закрывай|отмени|cancel|close|drop|не нужна|не нужен|не надо)\b", comment, flags=re.I)
                                     if close_re:
