@@ -815,12 +815,17 @@ async function transitionTask(id, action, comment='') {
   if (action === 'cancel') { task.status = 'cancelled'; task.run_status = 'idle'; }
   renderAll();
 }
-async function sendTaskBack(id) {
-  const comment = prompt('Что передать Клеверу? Например: заведи задачи на разработку фич A/B, для B учти поправку ...');
-  if (comment === null) return;
-  const trimmed = comment.trim();
+function openTaskSendBackDrawer(id) {
+  const task = state.tasks.find(t => t.id === id);
+  if (!task) return;
+  openDrawer(`${drawerHead('Send back to Clever', task.title)}<div class="drawer-card"><p>Напиши, что именно нужно сделать дальше. Комментарий будет добавлен в карточку задачи и задача вернётся Клеверу в очередь.</p><label class="inline-comment">Комментарий<textarea data-task-sendback-comment="${escapeHtml(id)}" placeholder="Например: заведи задачи на разработку pinned session card и approval inbox; для quiet mode предусмотри mute до blocker/done."></textarea></label></div><div class="drawer-section"><div class="item-actions"><button class="btn primary" data-action="task-sendback-submit" data-id="${escapeHtml(id)}">Send to Clever</button><button class="btn" data-action="close-drawer">Cancel</button></div></div>`);
+}
+async function submitTaskSendBack(id) {
+  const box = document.querySelector(`[data-task-sendback-comment="${CSS.escape(id)}"]`);
+  const trimmed = (box?.value || '').trim();
   if (!trimmed) { alert('Комментарий нужен, иначе непонятно что делать дальше.'); return; }
   await transitionTask(id, 'run', trimmed);
+  closeDrawer();
 }
 async function transitionProject(id, action) {
   if (apiAvailable) { applyApiState(await api('/api/projects/transition', { id, action }), { force:true }); openProjectDrawer(id); return; }
@@ -955,7 +960,8 @@ document.addEventListener('click', (event) => {
   if (action === 'project-restore') transitionProject(id, 'restore').catch(err => alert(err.message));
   if (action === 'open-task') openTaskDrawer(id);
   if (action === 'task-run') transitionTask(id, 'run').catch(err => alert(err.message));
-  if (action === 'task-sendback') sendTaskBack(id).catch(err => alert(err.message));
+  if (action === 'task-sendback') openTaskSendBackDrawer(id);
+  if (action === 'task-sendback-submit') submitTaskSendBack(id).catch(err => alert(err.message));
   if (action === 'task-schedule') transitionTask(id, 'schedule').catch(err => alert(err.message));
   if (action === 'task-reset') transitionTask(id, 'reset').catch(err => alert(err.message));
   if (action === 'task-done') transitionTask(id, 'done').catch(err => alert(err.message));
