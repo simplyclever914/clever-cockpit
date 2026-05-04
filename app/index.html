@@ -657,17 +657,19 @@ function pendingTaskConfirmationIds() {
 }
 function taskNeedsInbox(t, pendingConfirmations = pendingTaskConfirmationIds()) {
   const run = t.run_status || 'idle';
-  if (['confirmed','cancelled'].includes(t.status)) return false;
+  if (['confirmed','cancelled','scheduled'].includes(t.status)) return false;
+  if (['scheduled','queued','running'].includes(run)) return false;
   if (pendingConfirmations.has(t.id)) return false;
   if (t.status === 'done' || run === 'done') return true;
   if (run === 'failed' || t.status === 'waiting') return true;
+  if (t.status === 'open' && run === 'idle') return true;
   return false;
 }
 function inboxItems() {
   return [
     ...state.approvals.map(a => ({ type:'approval', item:a, rank:0 })),
     ...state.ideas.filter(i => i.status === 'review').map(i => ({ type:'idea', item:i, rank:1 })),
-    ...state.tasks.filter(t => taskNeedsInbox(t)).map(t => ({ type:'task', item:t, rank: t.status === 'done' || t.run_status === 'done' ? 2 : 3 })),
+    ...state.tasks.filter(t => taskNeedsInbox(t)).map(t => ({ type:'task', item:t, rank: t.status === 'done' || t.run_status === 'done' ? 2 : (t.status === 'open' && (t.run_status || 'idle') === 'idle' ? 4 : 3) })),
   ].sort((a,b) => a.rank - b.rank || (b.item.updated_at || b.item.created_at || '').localeCompare(a.item.updated_at || a.item.created_at || ''));
 }
 function renderInbox() {
