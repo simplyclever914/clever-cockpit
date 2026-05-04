@@ -200,29 +200,39 @@ def next_msk_0430() -> str:
     return target.astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
-def transition_task(conn: sqlite3.Connection, task_id: str, action: str) -> dict | None:
+def transition_task(conn: sqlite3.Connection, task_id: str, action: str, comment: str = "") -> dict | None:
     task = conn.execute("select * from tasks where id=?", (task_id,)).fetchone()
     if not task:
         return None
     t = now()
+    comment = (comment or "").strip()
+    note_suffix = f"\n\nVadim follow-up comment ({t}): {comment}" if comment else ""
     if action == "run":
-        conn.execute("update tasks set status='waiting', trigger='manual', run_status='queued', scheduled_for=null, last_error=null, updated_at=? where id=?", (t, task_id))
-        add_activity(conn, f"Task queued: {task['title']}", task["body"], "Task", "queued", "high")
+        new_notes = (task["user_notes"] or "") + note_suffix
+        conn.execute("update tasks set status='waiting', trigger='manual', run_status='queued', scheduled_for=null, last_error=null, user_notes=?, updated_at=? where id=?", (new_notes.strip(), t, task_id))
+        add_activity(conn, f"Task queued: {task['title']}", comment or task["body"], "Task", "queued", "high")
     elif action == "schedule":
         scheduled_for = next_msk_0430()
         conn.execute("update tasks set status='scheduled', trigger='schedule', run_status='scheduled', scheduled_for=?, last_error=null, updated_at=? where id=?", (scheduled_for, t, task_id))
         add_activity(conn, f"Task scheduled: {task['title']}", f"Scheduled for next 04:30 MSK ({scheduled_for}).", "Task", "scheduled", "normal")
     elif action == "reset":
-        conn.execute("update tasks set status='open', trigger='manual', run_status='idle', scheduled_for=null, last_error=null, updated_at=? where id=?", (t, task_id))
-        add_activity(conn, f"Task reset: {task['title']}", task["body"], "Task", "open", "normal")
+        new_notes = (task["user_notes"] or "") + note_suffix
+        conn.execute("update tasks set status='open', trigger='manual', run_status='idle', scheduled_for=null, last_error=null, user_notes=?, updated_at=? where id=?", (new_notes.strip(), t, task_id))
+        add_activity(conn, f"Task reset: {task['title']}", comment or task["body"], "Task", "open", "normal")
     elif action == "done":
         conn.execute("update tasks set status='done', run_status='done', last_run_at=?, last_error=null, updated_at=? where id=?", (t, t, task_id))
         add_activity(conn, f"Task completed: {task['title']}", task["body"], "Task", "done", "normal")
+    elif action == "confirm":
+        conn.execute("update tasks set status='confirmed', run_status='done', last_error=null, updated_at=? where id=?", (t, task_id))
+        add_activity(conn, f"Task confirmed: {task['title']}", task["body"], "Task", "confirmed", "normal")
+    elif action == "cancel":
+        conn.execute("update tasks set status='cancelled', trigger='manual', run_status='idle', scheduled_for=null, last_error=null, updated_at=? where id=?", (t, task_id))
+        add_activity(conn, f"Task cancelled: {task['title']}", task["body"], "Task", "cancelled", "normal")
     elif action == "waiting":
         conn.execute("update tasks set status='waiting', run_status='idle', last_error=?, updated_at=? where id=?", ("Waiting/blocker set from UI", t, task_id))
         add_activity(conn, f"Task waiting: {task['title']}", "Waiting/blocker set from UI", "Task", "waiting", "warn")
     else:
-        raise ValueError("action must be run, schedule, reset, done, or waiting")
+        raise ValueError("action must be run, schedule, reset, done, confirm, cancel, or waiting")
     conn.commit()
     updated = conn.execute("select * from tasks where id=?", (task_id,)).fetchone()
     return dict(updated) if updated else None
@@ -432,8 +442,8 @@ def create_task(conn: sqlite3.Connection, data: dict) -> dict:
     task_id = (data.get("id") or f"{slugify(title)}-{secrets.token_hex(3)}").strip()
     project = (data.get("project") or "Inbox").strip() or "Inbox"
     status = (data.get("status") or "open").strip() or "open"
-    if status not in {"open", "waiting", "scheduled", "done"}:
-        raise ValueError("status must be open, waiting, scheduled, or done")
+    if status not in {"open", "waiting", "scheduled", "done", "confirmed", "cancelled"}:
+        raise ValueError("status must be open, waiting, scheduled, done, confirmed, or cancelled")
     trigger = (data.get("trigger") or "manual").strip() or "manual"
     run_status = (data.get("run_status") or "idle").strip() or "idle"
     user_notes = (data.get("user_notes") or "").strip()
@@ -466,14 +476,16 @@ def update_task(conn: sqlite3.Connection, data: dict) -> dict | None:
     validate_task_description(body)
     user_notes = (data.get("user_notes") if data.get("user_notes") is not None else row["user_notes"]).strip()
     status = (data.get("status") if data.get("status") is not None else row["status"]).strip() or "open"
-    if status not in {"open", "waiting", "scheduled", "done"}:
-        raise ValueError("status must be open, waiting, scheduled, or done")
+    if status not in {"open", "waiting", "scheduled", "done", "confirmed", "cancelled"}:
+        raise ValueError("status must be open, waiting, scheduled, done, confirmed, or cancelled")
     t = now()
     run_status = row["run_status"]
     last_run_at = row["last_run_at"]
-    if status == "done" and run_status != "done":
+    if status in {"done", "confirmed"} and run_status != "done":
         run_status = "done"
         last_run_at = t
+    elif status == "cancelled":
+        run_status = "idle"
     elif status in {"open", "waiting"} and run_status in {"queued", "scheduled", "running", "done"}:
         run_status = "idle"
     conn.execute(
@@ -688,7 +700,8 @@ class Handler(SimpleHTTPRequestHandler):
                 elif parsed.path == "/api/tasks/transition":
                     task_id = data["id"]
                     action = data.get("action", "run")
-                    updated = transition_task(conn, task_id, action)
+                    comment = data.get("comment") or ""
+                    updated = transition_task(conn, task_id, action, comment)
                     if not updated:
                         self.send_json({"error": "task not found"}, 404); return
                 else:

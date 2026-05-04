@@ -651,7 +651,7 @@ function renderInbox() {
     const done = item.status === 'done' || item.run_status === 'done';
     const failed = item.run_status === 'failed' || item.status === 'waiting';
     const actions = done
-      ? `<button class="btn primary" data-action="task-confirm" data-id="${escapeHtml(item.id)}">Confirm done</button><button class="btn" data-action="task-reset" data-id="${escapeHtml(item.id)}">Return to work</button>`
+      ? `<button class="btn primary" data-action="task-confirm" data-id="${escapeHtml(item.id)}">Confirm done</button><button class="btn" data-action="task-sendback" data-id="${escapeHtml(item.id)}">Send back with comment</button><button class="btn" data-action="task-reset" data-id="${escapeHtml(item.id)}">Return to work</button>`
       : failed
         ? `<button class="btn primary" data-action="task-reset" data-id="${escapeHtml(item.id)}">Reopen</button><button class="btn" data-action="open-task" data-id="${escapeHtml(item.id)}">Details</button>`
         : `<button class="btn primary" data-action="task-run" data-id="${escapeHtml(item.id)}">Run</button><button class="btn" data-action="task-schedule" data-id="${escapeHtml(item.id)}">Schedule 04:30</button><button class="btn" data-action="task-cancel" data-id="${escapeHtml(item.id)}">Cancel</button><button class="btn" data-action="open-task" data-id="${escapeHtml(item.id)}">Details</button>`;
@@ -695,9 +695,9 @@ function taskActionButtons(t) {
   const done = t.status === 'done' || t.run_status === 'done';
   const confirmed = t.status === 'confirmed';
   const cancelled = t.status === 'cancelled';
-  if (confirmed) return `<div class="item-actions">${pill('confirmed', 'good')}<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Return to work</button></div>`;
+  if (confirmed) return `<div class="item-actions">${pill('confirmed', 'good')}<button class="btn primary" data-action="task-sendback" data-id="${escapeHtml(t.id)}">Send back with comment</button><button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Return to work</button></div>`;
   if (cancelled) return `<div class="item-actions">${pill('cancelled', 'bad')}<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reopen</button></div>`;
-  if (done) return `<div class="item-actions"><button class="btn primary" data-action="task-confirm" data-id="${escapeHtml(t.id)}">Confirm done</button><button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Return to work</button></div>`;
+  if (done) return `<div class="item-actions"><button class="btn primary" data-action="task-confirm" data-id="${escapeHtml(t.id)}">Confirm done</button><button class="btn" data-action="task-sendback" data-id="${escapeHtml(t.id)}">Send back with comment</button><button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Return to work</button></div>`;
   if (busy) return `<div class="item-actions"><button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button></div>`;
   return `<div class="item-actions"><button class="btn primary" data-action="task-run" data-id="${escapeHtml(t.id)}">Run</button><button class="btn" data-action="task-schedule" data-id="${escapeHtml(t.id)}">Schedule 04:30</button><button class="btn" data-action="task-done" data-id="${escapeHtml(t.id)}">Mark done</button><button class="btn" data-action="task-cancel" data-id="${escapeHtml(t.id)}">Cancel</button>${t.run_status && t.run_status !== 'idle' ? `<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button>` : ''}</div>`;
 }
@@ -799,17 +799,24 @@ async function convertIdea(id, mode) {
   }
   renderAll();
 }
-async function transitionTask(id, action) {
-  if (apiAvailable) { applyApiState(await api('/api/tasks/transition', { id, action }), { force:true }); return; }
+async function transitionTask(id, action, comment='') {
+  if (apiAvailable) { applyApiState(await api('/api/tasks/transition', { id, action, comment }), { force:true }); return; }
   const task = state.tasks.find(t => t.id === id);
   if (!task) return;
-  if (action === 'run') { task.status = 'waiting'; task.trigger = 'manual'; task.run_status = 'queued'; task.scheduled_for = null; }
+  if (action === 'run') { task.status = 'waiting'; task.trigger = 'manual'; task.run_status = 'queued'; task.scheduled_for = null; if (comment) task.user_notes = `${task.user_notes || ''}\n\nVadim follow-up comment: ${comment}`.trim(); }
   if (action === 'schedule') { task.status = 'scheduled'; task.trigger = 'schedule'; task.run_status = 'scheduled'; task.scheduled_for = 'next 04:30 MSK'; }
-  if (action === 'reset') { task.status = 'open'; task.trigger = 'manual'; task.run_status = 'idle'; task.scheduled_for = null; }
+  if (action === 'reset') { task.status = 'open'; task.trigger = 'manual'; task.run_status = 'idle'; task.scheduled_for = null; if (comment) task.user_notes = `${task.user_notes || ''}\n\nVadim follow-up comment: ${comment}`.trim(); }
   if (action === 'done') { task.status = 'done'; task.run_status = 'done'; task.last_run_at = new Date().toISOString(); }
   if (action === 'confirm') { task.status = 'confirmed'; task.run_status = 'done'; }
   if (action === 'cancel') { task.status = 'cancelled'; task.run_status = 'idle'; }
   renderAll();
+}
+async function sendTaskBack(id) {
+  const comment = prompt('Что передать Клеверу? Например: заведи задачи на разработку фич A/B, для B учти поправку ...');
+  if (comment === null) return;
+  const trimmed = comment.trim();
+  if (!trimmed) { alert('Комментарий нужен, иначе непонятно что делать дальше.'); return; }
+  await transitionTask(id, 'run', trimmed);
 }
 async function transitionProject(id, action) {
   if (apiAvailable) { applyApiState(await api('/api/projects/transition', { id, action }), { force:true }); openProjectDrawer(id); return; }
@@ -942,6 +949,7 @@ document.addEventListener('click', (event) => {
   if (action === 'project-restore') transitionProject(id, 'restore').catch(err => alert(err.message));
   if (action === 'open-task') openTaskDrawer(id);
   if (action === 'task-run') transitionTask(id, 'run').catch(err => alert(err.message));
+  if (action === 'task-sendback') sendTaskBack(id).catch(err => alert(err.message));
   if (action === 'task-schedule') transitionTask(id, 'schedule').catch(err => alert(err.message));
   if (action === 'task-reset') transitionTask(id, 'reset').catch(err => alert(err.message));
   if (action === 'task-done') transitionTask(id, 'done').catch(err => alert(err.message));
