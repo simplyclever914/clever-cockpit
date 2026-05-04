@@ -605,7 +605,8 @@ class Handler(SimpleHTTPRequestHandler):
                         (decision, run_status, body, t_now, approval_id),
                     )
                     # For task-attention inbox items, an accepted comment means: send the linked task back to Clever with this instruction.
-                    if decision == "accepted" and comment and row["kind"] == "task_attention":
+                    # For task-done confirmations, an accepted comment means: confirmed result + create/queue a follow-up task.
+                    if decision == "accepted" and comment and row["kind"] in {"task_attention", "task_done_confirmation"}:
                         try:
                             payload = json.loads(row["payload_json"] or "{}")
                         except json.JSONDecodeError:
@@ -615,8 +616,23 @@ class Handler(SimpleHTTPRequestHandler):
                             task = conn.execute("select * from tasks where id=?", (task_id,)).fetchone()
                             if task:
                                 notes = ((task["user_notes"] or "") + f"\n\nVadim follow-up comment ({t_now}): {comment}").strip()
-                                conn.execute("update tasks set status='waiting', trigger='manual', run_status='queued', scheduled_for=null, last_error=null, user_notes=?, updated_at=? where id=?", (notes, t_now, task_id))
-                                add_activity(conn, f"Task sent back from Inbox: {task['title']}", comment, "Task", "queued", "high")
+                                if row["kind"] == "task_done_confirmation":
+                                    conn.execute("update tasks set status='confirmed', run_status='done', last_error=null, user_notes=?, updated_at=? where id=?", (notes, t_now, task_id))
+                                    follow_title = f"Follow up: {task['title']}"
+                                    follow_id = f"{slugify(follow_title)}-{secrets.token_hex(3)}"
+                                    follow_body = (
+                                        f"Результат: выполнить следующий шаг после подтверждённой задачи `{task_id}` с учётом комментария Вадима. "
+                                        f"Объём: разобрать исходный отчёт/результат, комментарий Вадима и создать/выполнить конкретные follow-up действия без потери связи с родительской задачей. "
+                                        f"Готово когда: следующий артефакт или набор задач создан, а ссылка на follow-up записана в родительскую карточку.\n\nКомментарий Вадима:\n{comment}"
+                                    )
+                                    if not conn.execute("select 1 from tasks where id=?", (follow_id,)).fetchone():
+                                        conn.execute("insert into tasks(id,title,project,status,body,user_notes,source_idea_id,created_at,updated_at,trigger,run_status) values (?,?,?,?,?,?,?,?,?,?,?)", (follow_id, follow_title, task["project"] or "Inbox", "waiting", follow_body, f"Created automatically from confirmation `{row['id']}` for parent task `{task_id}`.", task["source_idea_id"], t_now, t_now, "manual", "queued"))
+                                        notes_with_link = (notes + f"\n\nFollow-up task: `{follow_id}`").strip()
+                                        conn.execute("update tasks set user_notes=?, updated_at=? where id=?", (notes_with_link, t_now, task_id))
+                                        add_activity(conn, f"Follow-up task created: {follow_title}", follow_body, "Task", "queued", "high")
+                                else:
+                                    conn.execute("update tasks set status='waiting', trigger='manual', run_status='queued', scheduled_for=null, last_error=null, user_notes=?, updated_at=? where id=?", (notes, t_now, task_id))
+                                    add_activity(conn, f"Task sent back from Inbox: {task['title']}", comment, "Task", "queued", "high")
                     add_activity(conn, f"Approval {decision}: {row['title']}", comment or body, "Approval", decision, row["priority"])
                     conn.commit()
                 elif parsed.path == "/api/approvals/complete":
