@@ -207,7 +207,7 @@
       <div class="brand"><div class="logo">🍀</div><div><h1>Clever Cockpit</h1><p>OpenClaw command center</p></div></div>
       <nav>
         <div class="nav-section">Workspace</div>
-        <button class="nav-btn urgent-nav" data-view="approvals">🚨 Approvals <span class="badge hot">2</span></button>
+        <button class="nav-btn urgent-nav" data-view="inbox">📥 Inbox <span class="badge hot">2</span></button>
         <button class="nav-btn active" data-view="ideas">💡 Ideas <span class="badge">8</span></button>
         <button class="nav-btn" data-view="projects">🧩 Projects <span class="badge">4</span></button>
         <button class="nav-btn" data-view="tasks">✅ Tasks <span class="badge">9</span></button>
@@ -239,13 +239,13 @@
     <main>
       <div class="topbar">
         <div class="title"><h2 id="view-title">Ideas</h2><p id="view-desc">Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.</p></div>
-        <div class="actions"><button class="btn" id="reset-demo">Reset demo</button><button class="btn" id="new-idea">New idea</button><button class="btn primary" id="review-approvals">Review approvals</button></div>
+        <div class="actions"><button class="btn" id="reset-demo">Reset demo</button><button class="btn" id="new-idea">New idea</button><button class="btn primary" id="review-inbox">Review inbox</button></div>
       </div>
 
       <section id="view-activity" class="view hidden">
         <div class="grid content-grid">
           <div class="card panel">
-            <div class="panel-head"><h3>Activity log</h3><div class="tabs"><button class="tab active">All</button><button class="tab">Approvals</button><button class="tab">Ideas</button><button class="tab">Runs</button></div></div>
+            <div class="panel-head"><h3>Activity log</h3><div class="tabs"><button class="tab active">All</button><button class="tab">Inbox</button><button class="tab">Ideas</button><button class="tab">Runs</button></div></div>
             <p style="color:var(--muted);margin-top:0">Chronological log of runs, approvals, idea transitions, publications, errors, and follow-up outcomes.</p>
             <div id="legend-activity"></div>
             <div id="activity-list"></div>
@@ -260,9 +260,9 @@
 
       <section id="view-schedules" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Schedules</h3><div class="tabs"><button class="tab active">OpenClaw cron</button></div></div><p style="color:var(--muted);margin-top:0">Configured cron activities with last run, next run, and the result of the latest execution.</p><div id="legend-schedules"></div><div id="schedule-list"></div></div></section>
       <section id="view-runs" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Runs</h3><div class="tabs"><button class="tab active">Subagents</button><button class="tab">Commands</button></div></div><div id="legend-runs"></div><div id="run-list"></div></div></section>
-      <section id="view-approvals" class="view hidden"><div class="card panel approval-alert"><div class="panel-head"><h3 style="display:flex;align-items:center;gap:10px"><span class="pulse"></span>Approvals need decision</h3><button class="btn primary">OK safe batch</button></div><p style="color:var(--muted);margin-top:0">Каждая карточка должна иметь явный исход: OK, Deny, Hold или Details/Comment. Никаких подвешенных внешних действий.</p><div id="legend-approvals"></div><div id="approval-list"></div></div><div class="card panel"><div class="panel-head"><h3>Long box / hold</h3></div><p style="color:var(--muted);margin-top:0">Идеи и решения, которые не требуют внимания сейчас. Они не входят в pending Approvals и не раздувают красный счётчик.</p><div id="held-approval-list"></div></div></section>
+      <section id="view-inbox" class="view hidden"><div class="card panel approval-alert"><div class="panel-head"><h3 style="display:flex;align-items:center;gap:10px"><span class="pulse"></span>Inbox needs attention</h3></div><p style="color:var(--muted);margin-top:0">Inbox — это всё, где нужен выбор Вадима: новая идея, внешний approval, задача перед запуском/планированием/отменой, или выполненная задача на подтверждение.</p><div id="legend-inbox"></div><div id="inbox-list"></div></div><div class="card panel"><div class="panel-head"><h3>Long box / hold</h3></div><p style="color:var(--muted);margin-top:0">Отложенные решения, которые не требуют внимания сейчас. Они не раздувают красный счётчик Inbox.</p><div id="held-approval-list"></div></div></section>
       <section id="view-ideas" class="view">
-        <div class="card panel approval-alert"><div class="panel-head" style="margin-bottom:6px"><h3 style="display:flex;align-items:center;gap:10px"><span class="pulse"></span>2 approvals need decision</h3><button class="btn primary" onclick="document.querySelector('[data-view=approvals]').click()">Review now</button></div><p style="color:var(--muted);margin:0">Есть pending OK/Deny. Пока они не разобраны, они подсвечиваются поверх идей, чтобы решения не терялись.</p></div>
+        <div class="card panel approval-alert"><div class="panel-head" style="margin-bottom:6px"><h3 style="display:flex;align-items:center;gap:10px"><span class="pulse"></span>2 inbox items need attention</h3><button class="btn primary" onclick="document.querySelector('[data-view=inbox]').click()">Review now</button></div><p style="color:var(--muted);margin:0">Есть решения, которые требуют внимания. Они подсвечиваются поверх идей, чтобы не теряться.</p></div>
         <div class="grid stats">
           <div class="card stat"><span>Captured ideas</span><b>8</b></div><div class="card stat"><span>Need decision</span><b>3</b></div><div class="card stat"><span>Converted to tasks</span><b>4</b></div><div class="card stat"><span>Parked</span><b>1</b></div>
         </div>
@@ -303,7 +303,7 @@
                 <div class="item"><h4>Task = next action</h4><p>Задача должна быть исполнимой: один понятный шаг, статус, привязка к проекту или source idea.</p></div>
                 <div class="item"><h4>Define before running</h4><p>У каждой задачи должно быть описание: outcome, scope, done criteria и blocker/trigger. В списках описание спрятано под spoiler, чтобы не шуметь.</p></div>
                 <div class="item"><h4>Schedules run by default</h4><p>Расписания делают свою работу без approval, если Вадим явно не поставил gate. Approval нужен для отдельных решений/новых идей.</p></div>
-                <div class="item"><h4>Approvals are explicit gates</h4><p>OK/Deny в Approvals не “просто заметка”: runner забирает approved action и выполняет только allowlisted handler.</p></div>
+                <div class="item"><h4>Inbox separates attention from work</h4><p>Inbox не равен “сделать всё”: это очередь решений. Explicit approvals остаются typed gates; идеи и задачи получают свои действия.</p></div>
                 <div class="item"><h4>Activity closes the loop</h4><p>Каждый запуск, публикация, ошибка или результат попадает в отдельный раздел Activity и может породить новую идею/таск.</p></div>
               </div>
             </div>
@@ -484,15 +484,23 @@ function loadState() {
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 async function resetDemo() { if (apiAvailable) { applyApiState(await api('/api/reset', {}), { force:true }); return; } state = seedState(); saveState(); renderAll(); }
 function escapeHtml(s='') { return String(s).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+function linkifyText(s='') {
+  const escaped = escapeHtml(s);
+  return escaped.replace(/https?:\/\/[^\s<]+/g, raw => {
+    const trailing = (raw.match(/[),.;:!?]+$/) || [''])[0];
+    const href = raw.slice(0, raw.length - trailing.length);
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>${trailing}`;
+  }).replace(/\n/g, '<br>');
+}
 function taskDescription(t, label='Описание') { return `<details class="task-description"><summary>${escapeHtml(label)}</summary><p>${escapeHtml(t.body || 'Описание задачи ещё не задано — перед запуском нужно уточнить результат, объём работ и критерии готовности.')}</p></details>`; }
 function taskBlocker(t) { return t.last_error ? `<div class="task-blocker"><b>Блокер / последняя ошибка:</b> ${escapeHtml(t.last_error)}</div>` : ''; }
-function userNotesBlock(x) { return x?.user_notes ? `<div class="task-blocker"><b>Замечания Вадима:</b> ${escapeHtml(x.user_notes)}</div>` : ''; }
+function userNotesBlock(x) { return x?.user_notes ? `<div class="task-blocker"><b>Замечания Вадима:</b> ${linkifyText(x.user_notes)}</div>` : ''; }
 function userNotesForm(type, x) { return `<form class="edit-form" data-notes-edit="${escapeHtml(type)}" data-id="${escapeHtml(x.id)}"><label>Замечания Вадима<textarea name="user_notes" placeholder="Уточнения, поправки, ограничения, что обязательно учесть при реализации">${escapeHtml(x.user_notes || '')}</textarea><p class="form-hint">Эти заметки не заменяют описание: runner обязан учитывать их вместе с идеей/проектом/задачей.</p></label><div class="item-actions"><button class="btn primary" type="button" data-action="notes-save" data-type="${escapeHtml(type)}" data-id="${escapeHtml(x.id)}">Сохранить замечания</button></div></form>`; }
 function pill(text, cls='') { return `<span class="pill ${cls}">${escapeHtml(text)}</span>`; }
 function legend(items, title='Legend') {
   return `<div class="legend"><span class="legend-title">${escapeHtml(title)}</span>${items.map(([label, meaning, cls='']) => `<span class="legend-item">${pill(label, cls)} <span>${escapeHtml(meaning)}</span></span>`).join('')}</div>`;
 }
-function statusClass(status) { return status === 'done' || status === 'approved' || status === 'published' || status === 'success' || status === 'active' ? 'good' : status === 'review' || status === 'in_review' || status === 'waiting' || status === 'scheduled' || status === 'maintenance' || status === 'planning' || status === 'hold' ? 'warn' : status === 'urgent' || status === 'danger' ? 'bad' : 'blue'; }
+function statusClass(status) { return status === 'done' || status === 'confirmed' || status === 'approved' || status === 'published' || status === 'success' || status === 'active' ? 'good' : status === 'review' || status === 'in_review' || status === 'waiting' || status === 'scheduled' || status === 'maintenance' || status === 'planning' || status === 'hold' ? 'warn' : status === 'urgent' || status === 'danger' || status === 'cancelled' ? 'bad' : 'blue'; }
 function priorityClass(priority) { return priority === 'urgent' || priority === 'danger' ? 'bad' : priority === 'high' ? 'warn' : 'blue'; }
 function activity(title, body, kind='Activity', status='done', priority='normal') {
   state.activity.unshift({ title, body, kind, status, priority });
@@ -527,7 +535,7 @@ function renderLegends() {
     'legend-artifact-checks': [['HTTP 200', 'published URL responds successfully', 'good'], ['no local paths', 'safe to share; no machine paths leaked', 'good'], ['required sections', 'digest/report has mandatory sections', 'good']],
     'legend-schedules': [['enabled', 'cron job is active', 'good'], ['disabled', 'cron job exists but will not run', 'warn'], ['ok', 'last run succeeded', 'good'], ['never', 'has not run yet', 'blue'], ['not-delivered', 'ran silently / no user message sent', 'blue']],
     'legend-runs': [['success', 'run completed successfully', 'good'], ['quiet', 'ran without needing notification', 'blue'], ['scheduled', 'planned for later', 'warn']],
-    'legend-approvals': [['external_action', 'would affect something outside local draft state', 'blue'], ['messaging', 'would send/pin a message', 'blue'], ['urgent', 'needs prompt decision', 'bad'], ['high', 'important but not emergency', 'warn'], ['record_only', 'handler records decision only', 'blue'], ['queued', 'accepted and waiting for runner', 'warn']],
+    'legend-inbox': [['idea', 'new captured signal needs triage', 'blue'], ['approval', 'explicit external/sensitive gate', 'warn'], ['task', 'choose run, schedule, cancel, confirm, or reopen', 'blue'], ['urgent', 'needs prompt decision', 'bad'], ['done', 'completed task waiting for confirmation', 'good']],
     'legend-ideas': [['converted to project/task', 'idea was accepted and follow-up objects exist', 'good'], ['closed', 'parked or intentionally not pursued now', 'warn'], ['proposed', 'captured but not triaged yet', 'blue'], ['review', 'needs a decision', 'warn'], ['approved', 'accepted for follow-up', 'good']],
     'legend-projects': [['draft', 'created but not active/confirmed yet', 'warn'], ['active', 'currently being worked', 'good'], ['maintenance', 'ongoing upkeep project', 'warn'], ['archived', 'kept for history, hidden from active attention', 'blue']],
     'legend-tasks': [['manual', 'does not execute until Run is pressed', 'blue'], ['idle', 'not queued yet', 'blue'], ['queued', 'waiting for task runner', 'warn'], ['scheduled', 'will run at 04:30 MSK', 'warn'], ['running', 'runner is executing now', 'warn'], ['done', 'completed', 'good'], ['failed', 'runner failed; needs attention', 'bad'], ['waiting', 'blocked or waiting for input/event', 'warn']],
@@ -538,7 +546,7 @@ function renderLegends() {
 }
 
 function renderCounts() {
-  const pending = state.approvals.length;
+  const pending = inboxItems().length;
   const ideas = state.ideas.length;
   const tasks = state.tasks.length;
   const projects = state.projects.filter(p => p.status !== 'archived').length;
@@ -546,22 +554,22 @@ function renderCounts() {
   const converted = state.ideas.filter(i => i.status === 'approved').length;
   const parked = state.ideas.filter(i => i.status === 'done').length;
 
-  setBadge('approvals', pending, true);
+  setBadge('inbox', pending, true);
   setBadge('ideas', ideas);
   setBadge('projects', projects);
   setBadge('tasks', tasks);
   setBadge('activity', state.activity.length);
   setBadge('schedules', (state.schedules || []).length);
 
-  const navApproval = $('[data-view="approvals"]');
+  const navApproval = $('[data-view="inbox"]');
   navApproval.classList.toggle('urgent-nav', pending > 0);
   const alert = $('#view-ideas .approval-alert');
   if (alert) {
     alert.classList.toggle('hidden', pending === 0);
-    alert.querySelector('h3').innerHTML = `<span class="pulse"></span>${pending} approvals need decision`;
+    alert.querySelector('h3').innerHTML = `<span class="pulse"></span>${pending} inbox items need attention`;
   }
-  const approvalTitle = $('#view-approvals h3');
-  if (approvalTitle) approvalTitle.innerHTML = pending > 0 ? `<span class="pulse"></span>Approvals need decision` : 'No pending approvals';
+  const approvalTitle = $('#view-inbox h3');
+  if (approvalTitle) approvalTitle.innerHTML = pending > 0 ? `<span class="pulse"></span>Inbox needs attention` : 'Inbox is clear';
 
   const stats = $$('#view-ideas .stat b');
   if (stats.length >= 4) {
@@ -578,7 +586,7 @@ function setBadge(view, count, hot=false) {
   if (!badge) { badge = document.createElement('span'); badge.className='badge'; btn.appendChild(badge); }
   badge.textContent = count;
   badge.classList.toggle('hot', hot && count > 0);
-  badge.classList.toggle('hidden', count === 0 && view !== 'approvals');
+  badge.classList.toggle('hidden', count === 0 && view !== 'inbox');
 }
 
 function itemCard(x, idx) {
@@ -620,11 +628,38 @@ function simpleList(id, rows, type) {
   const el = document.getElementById(id);
   el.innerHTML = rows.length ? rows.map(r => `<div class="item"><div class="item-top"><div><div class="pill-row">${pill(r[1] || type,'blue')} ${pill(r[2] || '', statusClass(r[2]))}</div><h4>${escapeHtml(r[0])}</h4><p>${escapeHtml(r[3] || '')}</p></div></div></div>`).join('') : '<div class="empty">Nothing here yet</div>';
 }
-function renderApprovals() {
-  const root = $('#approval-list');
-  root.innerHTML = state.approvals.length ? state.approvals.map(a => `<div class="item" data-approval="${a.id}"><div class="item-top"><div><div class="pill-row">${pill(a.kind,'blue')} ${pill(a.priority,priorityClass(a.priority))} ${a.handler ? pill(a.handler,'blue') : ''} ${a.run_status ? pill(a.run_status,statusClass(a.run_status)) : ''}</div><h4>${escapeHtml(a.title)}</h4><p>${escapeHtml(a.body)}</p></div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${a.id}">OK</button><button class="btn" data-action="deny" data-id="${a.id}">Deny</button><button class="btn" data-action="hold-approval" data-id="${a.id}">Hold</button><button class="btn" data-action="details" data-id="${a.id}">Details</button></div></div>`).join('') : '<div class="empty">No approvals pending. Ideas can flow normally.</div>';
+function taskNeedsInbox(t) {
+  const run = t.run_status || 'idle';
+  if (['confirmed','cancelled'].includes(t.status)) return false;
+  if (t.status === 'done' || run === 'done') return true;
+  if (run === 'failed' || t.status === 'waiting') return true;
+  return t.status === 'open' && run === 'idle';
+}
+function inboxItems() {
+  return [
+    ...state.approvals.map(a => ({ type:'approval', item:a, rank:0 })),
+    ...state.ideas.filter(i => ['proposed','review'].includes(i.status)).map(i => ({ type:'idea', item:i, rank:1 })),
+    ...state.tasks.filter(taskNeedsInbox).map(t => ({ type:'task', item:t, rank: t.status === 'done' || t.run_status === 'done' ? 2 : 3 })),
+  ].sort((a,b) => a.rank - b.rank || (b.item.updated_at || b.item.created_at || '').localeCompare(a.item.updated_at || a.item.created_at || ''));
+}
+function renderInbox() {
+  const root = $('#inbox-list');
+  if (!root) return;
+  const cards = inboxItems().map(({ type, item }) => {
+    if (type === 'approval') return `<div class="item" data-approval="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('approval','warn')} ${pill(item.kind,'blue')} ${pill(item.priority,priorityClass(item.priority))} ${item.handler ? pill(item.handler,'blue') : ''} ${item.run_status ? pill(item.run_status,statusClass(item.run_status)) : ''}</div><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.body)}</p></div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${escapeHtml(item.id)}">OK</button><button class="btn" data-action="deny" data-id="${escapeHtml(item.id)}">Deny</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(item.id)}">Hold</button><button class="btn" data-action="details" data-id="${escapeHtml(item.id)}">Details</button></div></div>`;
+    if (type === 'idea') return `<div class="item" data-idea="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('idea','blue')} ${pill(item.status,statusClass(item.status))}</div><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.body)}</p>${userNotesBlock(item)}</div></div><div class="item-actions"><button class="btn primary" data-action="idea-ok" data-id="${escapeHtml(item.id)}">Create project</button><button class="btn" data-action="idea-task" data-id="${escapeHtml(item.id)}">Make task</button><button class="btn" data-action="idea-deny" data-id="${escapeHtml(item.id)}">Park</button><button class="btn" data-action="open-idea" data-id="${escapeHtml(item.id)}">Details</button></div></div>`;
+    const done = item.status === 'done' || item.run_status === 'done';
+    const failed = item.run_status === 'failed' || item.status === 'waiting';
+    const actions = done
+      ? `<button class="btn primary" data-action="task-confirm" data-id="${escapeHtml(item.id)}">Confirm done</button><button class="btn" data-action="task-reset" data-id="${escapeHtml(item.id)}">Return to work</button>`
+      : failed
+        ? `<button class="btn primary" data-action="task-reset" data-id="${escapeHtml(item.id)}">Reopen</button><button class="btn" data-action="open-task" data-id="${escapeHtml(item.id)}">Details</button>`
+        : `<button class="btn primary" data-action="task-run" data-id="${escapeHtml(item.id)}">Run</button><button class="btn" data-action="task-schedule" data-id="${escapeHtml(item.id)}">Schedule 04:30</button><button class="btn" data-action="task-cancel" data-id="${escapeHtml(item.id)}">Cancel</button><button class="btn" data-action="open-task" data-id="${escapeHtml(item.id)}">Details</button>`;
+    return `<div class="item" data-task="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('task','blue')} ${pill(item.status,statusClass(item.status))} ${pill(item.run_status || 'idle', taskRunClass(item.run_status || 'idle'))}</div><h4>${escapeHtml(item.title)}</h4>${taskDescription(item)}${userNotesBlock(item)}${taskBlocker(item)}</div></div><div class="relation-row"><span>Project:</span>${escapeHtml(item.project || 'Inbox')}</div><div class="item-actions">${actions}</div></div>`;
+  });
+  root.innerHTML = cards.length ? cards.join('') : '<div class="empty">Inbox is clear. Nothing needs Vadim’s attention.</div>';
   const heldRoot = $('#held-approval-list');
-  if (heldRoot) heldRoot.innerHTML = (state.held_approvals || []).length ? state.held_approvals.map(a => `<div class="item" data-approval="${a.id}"><div class="item-top"><div><div class="pill-row">${pill('hold','warn')} ${pill(a.kind,'blue')} ${pill(a.priority,priorityClass(a.priority))}</div><h4>${escapeHtml(a.title)}</h4><p>${escapeHtml(a.body)}</p></div></div><div class="item-actions"><button class="btn" data-action="unhold-approval" data-id="${a.id}">Return to pending</button><button class="btn" data-action="details" data-id="${a.id}">Details</button></div></div>`).join('') : '<div class="empty">Long box is empty.</div>';
+  if (heldRoot) heldRoot.innerHTML = (state.held_approvals || []).length ? state.held_approvals.map(a => `<div class="item" data-approval="${escapeHtml(a.id)}"><div class="item-top"><div><div class="pill-row">${pill('hold','warn')} ${pill(a.kind,'blue')} ${pill(a.priority,priorityClass(a.priority))}</div><h4>${escapeHtml(a.title)}</h4><p>${escapeHtml(a.body)}</p></div></div><div class="item-actions"><button class="btn" data-action="unhold-approval" data-id="${escapeHtml(a.id)}">Return to inbox</button><button class="btn" data-action="details" data-id="${escapeHtml(a.id)}">Details</button></div></div>`).join('') : '<div class="empty">Long box is empty.</div>';
 }
 function renderIdeas() {
   const lanes = { proposed: $('#ideas-proposed'), review: $('#ideas-review'), approved: $('#ideas-approved'), done: $('#ideas-done') };
@@ -658,18 +693,22 @@ function taskRunClass(status) { return ['done'].includes(status) ? 'good' : ['fa
 function taskActionButtons(t) {
   const busy = ['queued','scheduled','running'].includes(t.run_status);
   const done = t.status === 'done' || t.run_status === 'done';
-  if (done) return `<div class="item-actions">${pill('closed', 'good')}${t.run_status && !['done','idle'].includes(t.run_status) ? `<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button>` : ''}</div>`;
+  const confirmed = t.status === 'confirmed';
+  const cancelled = t.status === 'cancelled';
+  if (confirmed) return `<div class="item-actions">${pill('confirmed', 'good')}<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Return to work</button></div>`;
+  if (cancelled) return `<div class="item-actions">${pill('cancelled', 'bad')}<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reopen</button></div>`;
+  if (done) return `<div class="item-actions"><button class="btn primary" data-action="task-confirm" data-id="${escapeHtml(t.id)}">Confirm done</button><button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Return to work</button></div>`;
   if (busy) return `<div class="item-actions"><button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button></div>`;
-  return `<div class="item-actions"><button class="btn primary" data-action="task-run" data-id="${escapeHtml(t.id)}">Run</button><button class="btn" data-action="task-schedule" data-id="${escapeHtml(t.id)}">Schedule 04:30</button><button class="btn" data-action="task-done" data-id="${escapeHtml(t.id)}">Mark done</button>${t.run_status && t.run_status !== 'idle' ? `<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button>` : ''}</div>`;
+  return `<div class="item-actions"><button class="btn primary" data-action="task-run" data-id="${escapeHtml(t.id)}">Run</button><button class="btn" data-action="task-schedule" data-id="${escapeHtml(t.id)}">Schedule 04:30</button><button class="btn" data-action="task-done" data-id="${escapeHtml(t.id)}">Mark done</button><button class="btn" data-action="task-cancel" data-id="${escapeHtml(t.id)}">Cancel</button>${t.run_status && t.run_status !== 'idle' ? `<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button>` : ''}</div>`;
 }
 function taskStatusOptions(status='open') {
-  return ['open','waiting','scheduled','done'].map(value => `<option value="${value}" ${value === status ? 'selected' : ''}>${value}</option>`).join('');
+  return ['open','waiting','scheduled','done','confirmed','cancelled'].map(value => `<option value="${value}" ${value === status ? 'selected' : ''}>${value}</option>`).join('');
 }
 function taskMatchesFilter(t) {
   const run = t.run_status || 'idle';
-  if (taskFilter === 'done') return t.status === 'done' || run === 'done';
+  if (taskFilter === 'done') return ['done','confirmed','cancelled'].includes(t.status) || run === 'done';
   if (taskFilter === 'waiting') return ['waiting','scheduled'].includes(t.status) || ['queued','scheduled','running','failed'].includes(run);
-  return !['done','waiting','scheduled'].includes(t.status) && !['queued','scheduled','running','failed','done'].includes(run);
+  return !['done','confirmed','cancelled','waiting','scheduled'].includes(t.status) && !['queued','scheduled','running','failed','done'].includes(run);
 }
 function renderTaskTabs() {
   $$('#view-tasks .tab').forEach(tab => tab.classList.toggle('active', tab.dataset.taskFilter === taskFilter));
@@ -723,7 +762,7 @@ function renderStaticLists() {
 }
 function renderAll() {
   document.documentElement.dataset.theme = currentTheme();
-  renderLegends(); renderCounts(); renderActivity(); renderApprovals(); renderIdeas(); renderProjects(); renderTasks(); renderStaticLists();
+  renderLegends(); renderCounts(); renderActivity(); renderInbox(); renderIdeas(); renderProjects(); renderTasks(); renderStaticLists();
   if (!apiAvailable) saveState();
 }
 
@@ -768,6 +807,8 @@ async function transitionTask(id, action) {
   if (action === 'schedule') { task.status = 'scheduled'; task.trigger = 'schedule'; task.run_status = 'scheduled'; task.scheduled_for = 'next 04:30 MSK'; }
   if (action === 'reset') { task.status = 'open'; task.trigger = 'manual'; task.run_status = 'idle'; task.scheduled_for = null; }
   if (action === 'done') { task.status = 'done'; task.run_status = 'done'; task.last_run_at = new Date().toISOString(); }
+  if (action === 'confirm') { task.status = 'confirmed'; task.run_status = 'done'; }
+  if (action === 'cancel') { task.status = 'cancelled'; task.run_status = 'idle'; }
   renderAll();
 }
 async function transitionProject(id, action) {
@@ -869,15 +910,15 @@ function showView(v) {
   $('#view-desc').textContent = titles[v][1];
 }
 
-const titles = {ideas:['Ideas','Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.'],projects:['Projects','Approved ideas grouped into outcomes with owners, next tasks, and review dates.'],tasks:['Tasks','Concrete next actions created from ideas, projects, digests, and operational work.'],workflow:['Workflow','The lifecycle that connects ideas, decisions, draft projects, tasks, approvals, schedules, and activity feedback.'],activity:['Activity','Chronological event log: runs, approvals, idea transitions, publications, errors, and outcomes.'],schedules:['Schedules','Configured OpenClaw cron activities with last run, next run, and last execution status.'],approvals:['Approvals','Human-in-the-loop queue with OK/Deny buttons for external, destructive, expensive, or sensitive actions.'],artifacts:['Artifacts','Digest drafts, SourceCraft pages, generated reports, scripts, and compareable outputs.'],runs:['Runs','Subagents, background commands, last success and logs.'],health:['Health','Freshness checks, sync state, publish checks, and operational risks.']};
+const titles = {inbox:['Inbox','Everything that needs Vadim’s attention: idea decisions, explicit approvals, task run/schedule/cancel choices, and completed-task confirmation.'],ideas:['Ideas','Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.'],projects:['Projects','Approved ideas grouped into outcomes with owners, next tasks, and review dates.'],tasks:['Tasks','Concrete next actions created from ideas, projects, digests, and operational work.'],workflow:['Workflow','The lifecycle that connects ideas, decisions, draft projects, tasks, approvals, schedules, and activity feedback.'],activity:['Activity','Chronological event log: runs, approvals, idea transitions, publications, errors, and outcomes.'],schedules:['Schedules','Configured OpenClaw cron activities with last run, next run, and last execution status.'],artifacts:['Artifacts','Digest drafts, SourceCraft pages, generated reports, scripts, and compareable outputs.'],runs:['Runs','Subagents, background commands, last success and logs.'],health:['Health','Freshness checks, sync state, publish checks, and operational risks.']};
 
 $$('.nav-btn').forEach(btn => btn.onclick = () => showView(btn.dataset.view));
 $$('[data-theme-btn]').forEach(btn => btn.onclick = () => { setTheme(btn.dataset.themeBtn); renderAll(); });
 $$('[data-task-filter]').forEach(btn => btn.onclick = () => { taskFilter = btn.dataset.taskFilter || 'open'; renderTasks(); });
 $('#reset-demo').onclick = () => { if (confirm('Reset demo data?')) resetDemo().catch(err => alert(err.message)); };
 $('#new-idea').onclick = captureIdea;
-$('#review-approvals').onclick = () => showView('approvals');
-$('#view-ideas .approval-alert button').onclick = () => showView('approvals');
+$('#review-inbox').onclick = () => showView('inbox');
+$('#view-ideas .approval-alert button').onclick = () => showView('inbox');
 $('#drawer-backdrop').onclick = closeDrawer;
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeDrawer(); });
 document.addEventListener('click', (event) => {
@@ -904,6 +945,8 @@ document.addEventListener('click', (event) => {
   if (action === 'task-schedule') transitionTask(id, 'schedule').catch(err => alert(err.message));
   if (action === 'task-reset') transitionTask(id, 'reset').catch(err => alert(err.message));
   if (action === 'task-done') transitionTask(id, 'done').catch(err => alert(err.message));
+  if (action === 'task-confirm') transitionTask(id, 'confirm').catch(err => alert(err.message));
+  if (action === 'task-cancel') transitionTask(id, 'cancel').catch(err => alert(err.message));
   if (action === 'task-save') {
     const form = btn.closest('form');
     if (form) saveTask(id, form).catch(err => alert(err.message));
