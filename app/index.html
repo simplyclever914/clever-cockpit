@@ -278,7 +278,7 @@
         <div class="card panel" style="margin-bottom:16px"><div class="panel-head"><h3>Idea intake</h3><button class="btn primary">+ Capture from chat</button></div><p style="color:var(--muted);margin-top:0">Каждая понравившаяся идея получает следующий шаг: <b>convert to project</b>, <b>create tasks</b>, <b>schedule review</b>, или <b>park with reason</b>. Никаких “надо бы потом”.</p><div id="legend-ideas"></div></div>
         <div class="kanban"><div class="card lane"><h3>Captured</h3><div id="ideas-proposed"></div></div><div class="card lane"><h3>Needs decision</h3><div id="ideas-review"></div></div><div class="card lane"><h3>Converted</h3><div id="ideas-approved"></div></div></div><details class="card panel" id="ideas-archive-panel"><summary style="cursor:pointer;font-weight:800">Archive: done / parked ideas</summary><p style="color:var(--muted);margin-top:10px">Закрытые идеи не занимают основной поток. Используй поиск, если нужно поднять старое решение.</p><input id="idea-archive-search" placeholder="Search archived ideas…" style="width:100%;border:1px solid var(--border2);border-radius:13px;background:var(--glass2);color:var(--text);padding:10px 12px;margin-bottom:12px"><div id="ideas-done"></div></details>
       </section>
-      <section id="view-projects" class="view hidden"><div class="grid content-grid"><div class="card panel"><div class="panel-head"><h3>Projects from approved ideas</h3><button class="btn primary">+ New project</button></div><div id="legend-projects"></div><div id="project-list"></div><details class="card panel" id="projects-archive-panel"><summary style="cursor:pointer;font-weight:800">Archive: archived projects</summary><p style="color:var(--muted);margin-top:10px">Закрытые проекты не занимают основной список, но остаются searchable.</p><input id="project-archive-search" placeholder="Search archived projects…" style="width:100%;border:1px solid var(--border2);border-radius:13px;background:var(--glass2);color:var(--text);padding:10px 12px;margin-bottom:12px"><div id="project-archive-list"></div></details></div><div class="card panel detail"><div class="preview"><h3>Project rule</h3><p>Approved idea should become a project only if it has owner, outcome, next task, and review date.</p><div class="kv"><div>Example</div><div>Clever Cockpit</div><div>Outcome</div><div>Не терять идеи/задачи из чата</div><div>Next</div><div>Create local datastore + add Telegram capture command</div></div></div></div></div></section>
+      <section id="view-projects" class="view hidden"><div class="grid content-grid"><div class="card panel"><div class="panel-head"><h3>Projects from approved ideas</h3><button class="btn primary">+ New project</button></div><div id="legend-projects"></div><div id="project-list"></div><button class="btn" data-action="toggle-project-archive">Show archived projects</button><div class="card panel hidden" id="projects-archive-panel"><div class="panel-head"><h3>Archive: archived projects</h3><button class="btn" data-action="toggle-project-archive">Hide archive</button></div><p style="color:var(--muted);margin-top:10px">Закрытые проекты не занимают основной список, но остаются searchable.</p><input id="project-archive-search" placeholder="Search archived projects…" style="width:100%;border:1px solid var(--border2);border-radius:13px;background:var(--glass2);color:var(--text);padding:10px 12px;margin-bottom:12px"><div id="project-archive-list"></div></div></div><div class="card panel detail"><div class="preview"><h3>Project rule</h3><p>Approved idea should become a project only if it has owner, outcome, next task, and review date.</p><div class="kv"><div>Example</div><div>Clever Cockpit</div><div>Outcome</div><div>Не терять идеи/задачи из чата</div><div>Next</div><div>Create local datastore + add Telegram capture command</div></div></div></div></div></section>
       <section id="view-tasks" class="view hidden"><div class="card panel"><div class="panel-head"><h3>Задачи</h3><div class="tabs"><button class="tab active" data-task-filter="open">Ready / open</button><button class="tab" data-task-filter="stale">Open/idle triage</button><button class="tab" data-task-filter="waiting">В работе / очередь / ожидание</button><button class="tab" data-task-filter="done">Готово</button></div></div><div id="legend-tasks"></div><div id="task-list"></div></div></section>
       <section id="view-workflow" class="view hidden">
         <div class="workflow-grid">
@@ -743,6 +743,14 @@ function renderIdeas() {
   if (activeLaneEntries.length === 1) activeLaneEntries[0][1].closest('.lane')?.classList.add('wide-lane');
   if (archive && !archive.innerHTML.trim()) archive.innerHTML = '<div class="empty">No archived ideas match.</div>';
 }
+function toggleProjectArchive() {
+  const panel = $('#projects-archive-panel');
+  if (!panel) return;
+  const willShow = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', !willShow);
+  $$('[data-action="toggle-project-archive"]').forEach(btn => { btn.textContent = willShow ? 'Hide archived projects' : 'Show archived projects'; });
+  if (willShow) renderProjects();
+}
 function projectCard(p) {
   const tasks = tasksForProject(p);
   const active = tasks.find(t => !['done','confirmed','cancelled'].includes(t.status) && (t.run_status || 'idle') !== 'done') || tasks[0];
@@ -758,7 +766,7 @@ function renderProjects() {
   const activeProjects = projects.filter(p => p.status !== 'archived');
   const archivedProjects = projects.filter(p => p.status === 'archived' && (!query || `${p.title || ''} ${p.body || ''} ${p.user_notes || ''}`.toLowerCase().includes(query)));
   root.innerHTML = activeProjects.length ? activeProjects.map(projectCard).join('') : '<div class="empty">No active projects.</div>';
-  if (archive) archive.innerHTML = archivedProjects.length ? archivedProjects.map(projectCard).join('') : '<div class="empty">No archived projects match.</div>';
+  if (archive && !$('#projects-archive-panel')?.classList.contains('hidden')) archive.innerHTML = archivedProjects.length ? archivedProjects.map(projectCard).join('') : '<div class="empty">No archived projects match.</div>';
 }
 function taskRunClass(status) { return ['done'].includes(status) ? 'good' : ['failed'].includes(status) ? 'bad' : ['queued','scheduled','running'].includes(status) ? 'warn' : 'blue'; }
 function taskActionButtons(t) {
@@ -1025,6 +1033,7 @@ document.addEventListener('click', (event) => {
   if (action === 'idea-dismiss') convertIdea(id, 'dismiss').catch(err => alert(err.message));
   if (action === 'idea-task') convertIdea(id, 'task').catch(err => alert(err.message));
   if (action === 'open-idea') openIdeaDrawer(id);
+  if (action === 'toggle-project-archive') toggleProjectArchive();
   if (action === 'open-project') openProjectDrawer(id);
   if (action === 'open-project-tasks') openProjectDrawer(id, btn.dataset.task || '');
   if (action === 'project-archive') transitionProject(id, 'archive').catch(err => alert(err.message));
