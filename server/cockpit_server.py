@@ -631,8 +631,13 @@ class Handler(SimpleHTTPRequestHandler):
                                         conn.execute("update tasks set user_notes=?, updated_at=? where id=?", (notes_with_link, t_now, task_id))
                                         add_activity(conn, f"Follow-up task created: {follow_title}", follow_body, "Task", "queued", "high")
                                 else:
-                                    conn.execute("update tasks set status='waiting', trigger='manual', run_status='queued', scheduled_for=null, last_error=null, user_notes=?, updated_at=? where id=?", (notes, t_now, task_id))
-                                    add_activity(conn, f"Task sent back from Inbox: {task['title']}", comment, "Task", "queued", "high")
+                                    close_re = re.search(r"\b(закрой|закрывай|отмени|cancel|close|drop|не нужна|не нужен|не надо)\b", comment, flags=re.I)
+                                    if close_re:
+                                        conn.execute("update tasks set status='cancelled', trigger='manual', run_status='idle', scheduled_for=null, last_error=null, user_notes=?, updated_at=? where id=?", (notes, t_now, task_id))
+                                        add_activity(conn, f"Task cancelled from Inbox: {task['title']}", comment, "Task", "cancelled", "high")
+                                    else:
+                                        conn.execute("update tasks set status='waiting', trigger='manual', run_status='queued', scheduled_for=null, last_error=null, user_notes=?, updated_at=? where id=?", (notes, t_now, task_id))
+                                        add_activity(conn, f"Task sent back from Inbox: {task['title']}", comment, "Task", "queued", "high")
                     add_activity(conn, f"Approval {decision}: {row['title']}", comment or body, "Approval", decision, row["priority"])
                     conn.commit()
                 elif parsed.path == "/api/approvals/complete":
