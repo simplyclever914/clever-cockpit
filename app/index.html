@@ -633,7 +633,7 @@ function taskNeedsInbox(t) {
   if (['confirmed','cancelled'].includes(t.status)) return false;
   if (t.status === 'done' || run === 'done') return true;
   if (run === 'failed' || t.status === 'waiting') return true;
-  return t.status === 'open' && run === 'idle';
+  return false;
 }
 function inboxItems() {
   return [
@@ -649,11 +649,11 @@ function renderInbox() {
     if (type === 'approval') return `<div class="item" data-approval="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('approval','warn')} ${pill(item.kind,'blue')} ${pill(item.priority,priorityClass(item.priority))} ${item.handler ? pill(item.handler,'blue') : ''} ${item.run_status ? pill(item.run_status,statusClass(item.run_status)) : ''}</div><h4>${escapeHtml(item.title)}</h4><p>${linkifyText(item.body)}</p></div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${escapeHtml(item.id)}">OK</button><button class="btn" data-action="deny" data-id="${escapeHtml(item.id)}">Deny</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(item.id)}">Hold</button><button class="btn" data-action="details" data-id="${escapeHtml(item.id)}">Details</button></div></div>`;
     if (type === 'idea') return `<div class="item" data-idea="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('idea','blue')} ${pill(item.status,statusClass(item.status))}</div><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.body)}</p>${userNotesBlock(item)}</div></div><div class="item-actions"><button class="btn primary" data-action="idea-ok" data-id="${escapeHtml(item.id)}">Create project</button><button class="btn" data-action="idea-task" data-id="${escapeHtml(item.id)}">Make task</button><button class="btn" data-action="idea-deny" data-id="${escapeHtml(item.id)}">Park</button><button class="btn" data-action="open-idea" data-id="${escapeHtml(item.id)}">Details</button></div></div>`;
     const done = item.status === 'done' || item.run_status === 'done';
-    const failed = item.run_status === 'failed' || item.status === 'waiting';
+    const blocked = item.run_status === 'failed' || item.status === 'waiting';
     const actions = done
       ? `<button class="btn primary" data-action="task-confirm" data-id="${escapeHtml(item.id)}">Confirm done</button><button class="btn" data-action="task-sendback" data-id="${escapeHtml(item.id)}">Send back with comment</button><button class="btn" data-action="task-reset" data-id="${escapeHtml(item.id)}">Return to work</button>`
-      : failed
-        ? `<button class="btn primary" data-action="task-reset" data-id="${escapeHtml(item.id)}">Reopen</button><button class="btn" data-action="open-task" data-id="${escapeHtml(item.id)}">Details</button>`
+      : blocked
+        ? `<button class="btn primary" data-action="task-sendback" data-id="${escapeHtml(item.id)}">Send back with comment</button><button class="btn" data-action="task-reset" data-id="${escapeHtml(item.id)}">Clear blocker</button><button class="btn" data-action="open-task" data-id="${escapeHtml(item.id)}">Details</button>`
         : `<button class="btn primary" data-action="task-run" data-id="${escapeHtml(item.id)}">Run</button><button class="btn" data-action="task-schedule" data-id="${escapeHtml(item.id)}">Schedule 04:30</button><button class="btn" data-action="task-cancel" data-id="${escapeHtml(item.id)}">Cancel</button><button class="btn" data-action="open-task" data-id="${escapeHtml(item.id)}">Details</button>`;
     return `<div class="item" data-task="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('task','blue')} ${pill(item.status,statusClass(item.status))} ${pill(item.run_status || 'idle', taskRunClass(item.run_status || 'idle'))}</div><h4>${escapeHtml(item.title)}</h4>${taskDescription(item)}${userNotesBlock(item)}${taskBlocker(item)}</div></div><div class="relation-row"><span>Project:</span>${escapeHtml(item.project || 'Inbox')}</div><div class="item-actions">${actions}</div></div>`;
   });
@@ -696,7 +696,7 @@ function taskActionButtons(t) {
   const confirmed = t.status === 'confirmed';
   const cancelled = t.status === 'cancelled';
   if (confirmed) return `<div class="item-actions">${pill('confirmed', 'good')}<button class="btn primary" data-action="task-sendback" data-id="${escapeHtml(t.id)}">Send back with comment</button><button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Return to work</button></div>`;
-  if (cancelled) return `<div class="item-actions">${pill('cancelled', 'bad')}<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reopen</button></div>`;
+  if (cancelled) return `<div class="item-actions">${pill('cancelled', 'bad')}<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Restore</button></div>`;
   if (done) return `<div class="item-actions"><button class="btn primary" data-action="task-confirm" data-id="${escapeHtml(t.id)}">Confirm done</button><button class="btn" data-action="task-sendback" data-id="${escapeHtml(t.id)}">Send back with comment</button><button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Return to work</button></div>`;
   if (busy) return `<div class="item-actions"><button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button></div>`;
   return `<div class="item-actions"><button class="btn primary" data-action="task-run" data-id="${escapeHtml(t.id)}">Run</button><button class="btn" data-action="task-schedule" data-id="${escapeHtml(t.id)}">Schedule 04:30</button><button class="btn" data-action="task-done" data-id="${escapeHtml(t.id)}">Mark done</button><button class="btn" data-action="task-cancel" data-id="${escapeHtml(t.id)}">Cancel</button>${t.run_status && t.run_status !== 'idle' ? `<button class="btn" data-action="task-reset" data-id="${escapeHtml(t.id)}">Reset</button>` : ''}</div>`;
