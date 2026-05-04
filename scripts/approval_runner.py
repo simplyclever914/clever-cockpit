@@ -128,6 +128,28 @@ def handle_sourcecraft_publish(_approval: dict, payload: dict) -> str:
     return publish_sourcecraft(payload)
 
 
+def handle_task_confirm(_approval: dict, payload: dict) -> str:
+    task_id = str(payload.get("task_id") or "").strip()
+    target_status = str(payload.get("target_status") or "confirmed").strip()
+    if not task_id:
+        raise HandlerError("task_id is required")
+    if target_status not in {"confirmed", "done"}:
+        raise HandlerError("target_status must be confirmed or done")
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("select * from tasks where id=?", (task_id,)).fetchone()
+        if not row:
+            raise HandlerError(f"task not found: {task_id}")
+        t = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
+        conn.execute("update tasks set status=?, updated_at=? where id=?", (target_status, t, task_id))
+        conn.execute(
+            "insert into activity(title,kind,status,priority,body,created_at) values (?,?,?,?,?,?)",
+            (f"Task confirmed: {row['title']}", "TaskConfirmation", target_status, "normal", payload.get("report_url") or "Confirmed by approval.", t),
+        )
+        conn.commit()
+    return f"Task {task_id} moved to {target_status}"
+
+
 def publish_sourcecraft(payload: dict) -> str:
     source = resolve_path(str(payload.get("source") or ""), allow_tmp=False)
     slug = str(payload.get("slug") or "").strip()
@@ -167,6 +189,7 @@ HANDLERS: dict[str, Callable[[dict, dict], str]] = {
     "telegram_send_and_pin_digest": handle_telegram_send_and_pin_digest,
     "sourcecraft_publish": handle_sourcecraft_publish,
     "digest_publish_and_send": handle_digest_publish_and_send,
+    "task_confirm": handle_task_confirm,
 }
 
 
