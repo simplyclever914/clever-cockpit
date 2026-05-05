@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import re
@@ -553,6 +554,12 @@ class Handler(SimpleHTTPRequestHandler):
     def auth_ok(self) -> bool:
         if not self.require_token:
             return True
+        try:
+            peer = ipaddress.ip_address(self.client_address[0])
+            if peer.is_loopback:
+                return True
+        except ValueError:
+            pass
         parsed = urlparse(self.path)
         query_token = parse_qs(parsed.query).get("token", [None])[0]
         header = self.headers.get("Authorization", "")
