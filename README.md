@@ -1,6 +1,6 @@
 # Clever Cockpit
 
-BentoBoard-inspired local cockpit for OpenClaw/Clever focused on **ideas, projects, tasks, and approvals** so useful thoughts do not disappear in chat.
+BentoBoard-inspired local cockpit for OpenClaw/Clever focused on **inbox, ideas, projects, and tasks** so useful thoughts and decisions do not disappear in chat.
 
 This repository is intentionally SDD-first using vanilla Fission-AI/OpenSpec: product/UX decisions live in OpenSpec artifacts before implementation details grow.
 
@@ -9,7 +9,8 @@ This repository is intentionally SDD-first using vanilla Fission-AI/OpenSpec: pr
 - Static dependency-free cockpit UI in `app/index.html`.
 - SQLite-backed local service in `server/cockpit_server.py` with LocalStorage fallback for static previews.
 - Interactions:
-  - approvals can be `OK`/`Deny`/`Details`;
+  - Inbox shows what needs Вадим’s attention: idea triage, explicit approvals, task run/schedule/cancel decisions, and completed-task confirmation;
+  - explicit approvals can be `OK`/`Deny`/`Details`;
   - ideas can be approved, denied/parked, or converted into tasks;
   - approved ideas become project/task material rather than dead chat notes.
 - Approval runner:
@@ -37,7 +38,7 @@ python3 server/cockpit_server.py --host 0.0.0.0 --port 8765
 
 State is stored in `data/cockpit.sqlite`. The LAN token is stored in `data/token` with local-only permissions when possible. Do not expose this service to the public internet.
 
-Approval semantics are intentionally status-only: OK/Deny updates Cockpit state. OpenClaw/Clever must check that status before continuing any external action.
+Approval semantics are intentionally status-only: OK/Deny updates Cockpit state. OpenClaw/Clever must check that status before continuing any external action. UI-wise, approvals are now one Inbox item type rather than the whole attention queue.
 
 Run the approval runner alongside the server:
 

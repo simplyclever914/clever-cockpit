@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import urllib.request
 from pathlib import Path
 
-WORKSPACE = Path('/home/clever/.openclaw/workspace')
-COCKPIT = WORKSPACE / 'github' / 'clever-cockpit'
-TOKEN_FILE = COCKPIT / 'data' / 'token'
+WORKSPACE = Path(os.environ.get('OPENCLAW_WORKSPACE', Path.home() / '.openclaw' / 'workspace')).expanduser()
+COCKPIT = Path(os.environ.get('CLEVER_COCKPIT_ROOT', WORKSPACE / 'github' / 'clever-cockpit')).expanduser()
+TOKEN_FILE = Path(os.environ.get('CLEVER_COCKPIT_TOKEN_FILE', COCKPIT / 'data' / 'token')).expanduser()
 
 
 def post(base_url: str, token: str, path: str, payload: dict) -> dict:

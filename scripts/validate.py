@@ -11,9 +11,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 HTML = ROOT / "app" / "index.html"
 
 REQUIRED_MARKERS = [
-    'data-view="approvals"',
+    'data-view="inbox"',
     'class="badge hot"',
-    'approvals need decision',
+    'inbox items need attention',
     'OK',
     'Deny',
     'data-view="ideas"',
@@ -42,6 +42,8 @@ REQUIRED_MARKERS = [
     'decideApproval',
     'convertIdea',
     'data-action="idea-task"',
+    'data-action="task-confirm"',
+    'data-action="task-cancel"',
     '/api/state',
     '/api/approvals/decide',
     '/api/ideas/transition',
@@ -91,8 +93,6 @@ CREATE_IDEA_MARKERS = [
 ]
 FORBIDDEN_MARKERS = [
     'data-view="architecture"',
-    'data-view="inbox"',
-    'view-inbox',
     'SOURCECRAFT_TOKEN',
     '/home/clever',
     '/tmp/',
@@ -133,7 +133,8 @@ def main() -> int:
     for marker in CREATE_IDEA_MARKERS:
         if marker not in create_idea_text:
             errors.append(f'missing create idea marker: {marker}')
-    py_compile = subprocess.run([sys.executable, '-m', 'py_compile', str(ROOT / 'server' / 'cockpit_server.py'), str(ROOT / 'scripts' / 'approval_runner.py'), str(ROOT / 'scripts' / 'create-cockpit-approval.py'), str(ROOT / 'scripts' / 'create-cockpit-idea.py')], cwd=ROOT, text=True, capture_output=True)
+    py_files = [ROOT / 'server' / 'cockpit_server.py'] + sorted((ROOT / 'scripts').glob('*.py'))
+    py_compile = subprocess.run([sys.executable, '-m', 'py_compile', *map(str, py_files)], cwd=ROOT, text=True, capture_output=True)
     if py_compile.returncode != 0:
         errors.append('server py_compile failed:\n' + (py_compile.stderr.strip() or py_compile.stdout.strip()))
 
