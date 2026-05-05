@@ -2,26 +2,29 @@
 
 ## Что сделано
 
-Подготовлен безопасный runnable implementation path для weekly Telegram knowledge map digest: суббота 11:00 Europe/Moscow, сбор из существующего Telegram user-search index, локальный markdown dry-run, дальнейшая публикация SourceCraft и pinned announcement через существующий send-and-pin helper.
+Подготовлен и включён weekly Telegram knowledge map digest: суббота 11:00 Europe/Moscow, сбор из существующего Telegram user-search index, локальный markdown artifact, публикация SourceCraft и pinned announcement в Telegram direct chat Вадима.
 
 ## Зачем это нужно / как влияет на UX Вадима
 
 Вадим получает не просто дневной поток ссылок, а еженедельную карту повторяющихся тем, новых источников и сильных инсайтов. Публикация SourceCraft даёт устойчивую ссылку, pinned announcement помогает не потерять выпуск в Telegram.
 
-## Safe schedule
+## Schedule
 
-Cron expression for Europe/Moscow host time:
+OpenClaw cron: `0 11 * * 6` in `Europe/Moscow`.
 
-```cron
-0 11 * * 6 cd "$HOME/.openclaw/workspace" && python3 github/clever-cockpit/scripts/weekly_telegram_knowledge_map_digest.py --days 7 --limit 300 --out digests/weekly-telegram-knowledge-map/$(date +\%F).md
-```
-
-Publishing/pinning should be a second explicit step after successful local artifact generation:
+Workflow:
 
 ```bash
-# publish markdown/html with SourceCraft flow, then announce/pin the resulting URL
-scripts/telegram-send-and-pin-digest.mjs --title "Weekly Telegram knowledge map" --url "$SOURCECRAFT_URL" --pin
+cd "$HOME/.openclaw/workspace"
+date=$(TZ=Europe/Moscow date +%F)
+md="digests/weekly-telegram-knowledge-map/${date}.md"
+site="digests/out/weekly-telegram-knowledge-map-${date}"
+python3 github/clever-cockpit/scripts/weekly_telegram_knowledge_map_digest.py --days 7 --limit 300 --out "$md"
+python3 scripts/markdown-digest-to-html.py "$md" "$site" --title "Weekly Telegram knowledge map — ${date}" --note "Weekly map from Vadim's local Telegram index."
+python3 skills/sourcecraft-publisher/scripts/publish_static.py --source "$site" --slug "weekly-telegram-knowledge-map-${date}" --date "$date"
 ```
+
+The cron then sends and pins a short Telegram announcement through `scripts/telegram-send-and-pin-digest.mjs weekly_knowledge ...`.
 
 ## Data flow
 
@@ -34,11 +37,11 @@ scripts/telegram-send-and-pin-digest.mjs --title "Weekly Telegram knowledge map"
 
 ## Dry-run result
 
-A local dry-run artifact was generated at `artifacts/weekly-telegram-knowledge-map-dry-run-2026-05-05.md` from recent MyBookmarks/index sample.
+A local dry-run artifact was generated at `local-artifacts/clever-cockpit/2026-05-05/weekly-telegram-knowledge-map-dry-run-2026-05-05.md` from recent MyBookmarks/index sample.
 
 ## Что дальше
 
-A human decision is needed before enabling live cron/pinning: confirm the exact Telegram delivery target/channel for the pinned announcement and approve installing the cron entry. Until then, the runnable implementation and dry-run artifact are prepared, but no external delivery was performed.
+Enabled after Vadim confirmed cron is allowed and the delivery target is the current Telegram direct chat.
 
 ## Доказательства
 

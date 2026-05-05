@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate a local weekly Telegram knowledge-map digest from the user-search SQLite index.
 
-Safe by default: read-only local DB, markdown artifact only, no network sends/pins.
+Safe by default: read-only local DB and markdown artifact only. Publishing/sending is handled by the caller.
 """
 from __future__ import annotations
 
@@ -90,7 +90,7 @@ def main() -> int:
             by_topic[topic].append(r)
 
     lines = [
-        '# Weekly Telegram knowledge map digest (dry run)', '',
+        '# Weekly Telegram knowledge map digest', '',
         f'Generated: {now}',
         f'Window: last {args.days} days · messages sampled: {len(rows)}', '',
         '## 5–7 knowledge-map bullets', ''
@@ -109,7 +109,7 @@ def main() -> int:
     lines += ['', '## Top URLs', '']
     for url, count in url_counter.most_common(20):
         lines.append(f'- {url}' + (f' ({count} mentions)' if count > 1 else ''))
-    lines += ['', '## Next step', '', 'Review, publish to SourceCraft, then announce/pin in the configured Telegram target after human approval of delivery target.']
+    lines += ['', '## Next step', '', 'Review the recurring themes and decide what should become a concrete Cockpit task or deeper research thread.']
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text('\n'.join(lines) + '\n', encoding='utf-8')
