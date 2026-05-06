@@ -692,20 +692,20 @@ function simpleList(id, rows, type) {
   const el = document.getElementById(id);
   el.innerHTML = rows.length ? rows.map(r => `<div class="item"><div class="item-top"><div><div class="pill-row">${pill(r[1] || type,'blue')} ${pill(r[2] || '', statusClass(r[2]))}</div><h4>${escapeHtml(r[0])}</h4><p>${escapeHtml(r[3] || '')}</p></div></div></div>`).join('') : '<div class="empty">Nothing here yet</div>';
 }
-function pendingTaskConfirmationIds() {
+function pendingTaskInboxIds() {
   return new Set(state.approvals
-    .filter(a => a.status === 'pending' && a.kind === 'task_done_confirmation')
+    .filter(a => a.status === 'pending' && ['task_done_confirmation','task_attention'].includes(a.kind))
     .map(a => {
       try { return JSON.parse(a.payload_json || '{}').task_id || ''; }
       catch { return ''; }
     })
     .filter(Boolean));
 }
-function taskNeedsInbox(t, pendingConfirmations = pendingTaskConfirmationIds()) {
+function taskNeedsInbox(t, pendingTaskInbox = pendingTaskInboxIds()) {
   const run = t.run_status || 'idle';
   if (['confirmed','cancelled','scheduled'].includes(t.status)) return false;
   if (['scheduled','queued','running'].includes(run)) return false;
-  if (pendingConfirmations.has(t.id)) return false;
+  if (pendingTaskInbox.has(t.id)) return false;
   if (t.status === 'done' || run === 'done') return true;
   if (run === 'failed' || t.status === 'waiting') return true;
   if (t.status === 'open' && run === 'idle') return true;
