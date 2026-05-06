@@ -170,12 +170,14 @@
     .node.agent { border-color:color-mix(in srgb,var(--warn) 40%,transparent); }
     .node.store { border-color:color-mix(in srgb,var(--good) 38%,transparent); }
     .node.ui { border-color:color-mix(in srgb,var(--accent2) 40%,transparent); }
-    .workflow-grid { display:grid; grid-template-columns: 1.1fr .9fr; gap:16px; }
-    .workflow-map { min-height:680px; position:relative; overflow:auto; }
-    .workflow-map svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+    .workflow-grid { display:grid; grid-template-columns: 1fr; gap:16px; }
+    .workflow-map { min-height:720px; position:relative; overflow:auto; }
+    .workflow-canvas { position:relative; min-width:820px; min-height:660px; }
+    .workflow-map svg { position:absolute; inset:0; width:820px; height:660px; pointer-events:none; }
     .wf-node { position:absolute; width:190px; padding:13px; border-radius:18px; border:1px solid var(--border2); background:var(--glass); box-shadow:0 10px 40px rgba(0,0,0,.18); }
+    .wf-node { z-index:2; }
     .wf-node b { display:block; margin-bottom:5px; }
-    .wf-node small { display:block; color:var(--soft); line-height:1.35; }
+    .wf-node small { display:block; color:var(--muted); line-height:1.35; }
     .wf-node.idea { border-color:color-mix(in srgb,var(--blue) 40%,transparent); }
     .wf-node.decision { border-color:color-mix(in srgb,var(--warn) 45%,transparent); }
     .wf-node.project { border-color:color-mix(in srgb,var(--accent2) 45%,transparent); }
@@ -291,37 +293,40 @@
       <section id="view-workflow" class="view hidden">
         <div class="workflow-grid">
           <div class="card panel workflow-map">
-            <div class="panel-head"><h3>Idea → Project → Task lifecycle</h3><span class="pill blue">draft-first</span></div>
+            <div class="panel-head"><h3>Intake → Decision → Work → Result lifecycle</h3><span class="pill blue">draft-first</span></div>
             <div id="legend-workflow"></div>
-            <svg viewBox="0 0 760 640" preserveAspectRatio="none" aria-hidden="true">
-              <defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="rgba(148,163,184,.75)" /></marker></defs>
-              <path d="M145 120 C230 120 250 120 330 120" stroke="rgba(148,163,184,.75)" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
-              <path d="M430 125 C520 125 535 125 620 125" stroke="rgba(148,163,184,.75)" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
-              <path d="M660 190 C660 245 660 260 660 315" stroke="rgba(148,163,184,.75)" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
-              <path d="M595 380 C500 420 425 430 330 430" stroke="rgba(148,163,184,.75)" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
-              <path d="M235 430 C165 410 125 355 125 285" stroke="rgba(148,163,184,.45)" stroke-width="2" fill="none" marker-end="url(#arrow)" stroke-dasharray="6 7"/>
-              <path d="M330 165 C270 225 220 240 170 240" stroke="rgba(148,163,184,.55)" stroke-width="2" fill="none" marker-end="url(#arrow)" stroke-dasharray="6 7"/>
-              <path d="M660 380 C660 470 585 525 445 525" stroke="rgba(148,163,184,.45)" stroke-width="2" fill="none" marker-end="url(#arrow)" stroke-dasharray="6 7"/>
-            </svg>
-            <div class="wf-node idea" style="left:26px;top:76px"><b>1. Captured idea</b><small>“Это интересно”, `/idea`, manual capture, or Clever notices a useful opportunity.</small></div>
-            <div class="wf-node decision" style="left:298px;top:76px"><b>2. Decision gate</b><small>Clarify value, risk, owner, next step. Outcome: park, make task, or create draft project.</small></div>
-            <div class="wf-node project" style="left:548px;top:76px"><b>3. Draft project</b><small>Approved idea becomes a draft project with outcome + first task. Not active until confirmed.</small></div>
-            <div class="wf-node task" style="left:548px;top:318px"><b>4. Tasks</b><small>Concrete next actions. Tasks can come from a project or directly from a small approved idea.</small></div>
-            <div class="wf-node approval" style="left:92px;top:238px"><b>Approval checkpoint</b><small>Only explicit gates or new idea decisions pause here. Normal schedules run directly.</small></div>
-            <div class="wf-node feedback" style="left:235px;top:410px"><b>5. Run/result</b><small>Work produces Activity entries, artifacts, learnings, blocked states, or follow-up ideas.</small></div>
-            <div class="wf-node idea" style="left:365px;top:506px"><b>Feedback loop</b><small>Results can spawn new ideas, update the project, or close tasks. Nothing should disappear in chat.</small></div>
+            <div class="workflow-canvas">
+              <svg viewBox="0 0 820 660" preserveAspectRatio="none" aria-hidden="true">
+                <defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="rgba(148,163,184,.75)" /></marker></defs>
+                <path d="M220 132 C252 132 268 132 300 132" stroke="rgba(148,163,184,.75)" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+                <path d="M490 132 C522 132 538 132 570 132" stroke="rgba(148,163,184,.75)" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+                <path d="M665 212 C665 252 665 282 665 322" stroke="rgba(148,163,184,.75)" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+                <path d="M570 378 C538 378 522 378 490 378" stroke="rgba(148,163,184,.75)" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+                <path d="M300 378 C266 378 246 378 212 378" stroke="rgba(148,163,184,.75)" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+                <path d="M125 322 C125 282 125 252 125 212" stroke="rgba(148,163,184,.62)" stroke-width="2" fill="none" marker-end="url(#arrow)" stroke-dasharray="6 7"/>
+                <path d="M125 448 C125 520 210 568 300 568" stroke="rgba(148,163,184,.62)" stroke-width="2" fill="none" marker-end="url(#arrow)" stroke-dasharray="6 7"/>
+                <path d="M490 568 C570 568 650 520 665 448" stroke="rgba(148,163,184,.62)" stroke-width="2" fill="none" marker-end="url(#arrow)" stroke-dasharray="6 7"/>
+              </svg>
+              <div class="wf-node idea" style="left:30px;top:86px"><b>1. Intake</b><small>Идея, ссылка, просьба из чата, `/idea`, digest finding или замеченная возможность.</small></div>
+              <div class="wf-node decision" style="left:300px;top:86px"><b>2. Decision gate</b><small>Короткая проверка ценности, риска, owner, next step. Итог: park, task или draft project.</small></div>
+              <div class="wf-node project" style="left:570px;top:86px"><b>3. Draft project</b><small>Для крупной идеи фиксируются outcome, priority, review date и первый исполнимый task.</small></div>
+              <div class="wf-node task" style="left:570px;top:322px"><b>4. Ready task</b><small>Один следующий шаг с scope, done criteria, blocker/trigger и связью с project/source.</small></div>
+              <div class="wf-node feedback" style="left:300px;top:322px"><b>5. Run / schedule</b><small>Ручной запуск, scheduled job или runner выполняет работу и пишет evidence в Activity.</small></div>
+              <div class="wf-node approval" style="left:30px;top:322px"><b>6. Result / attention</b><small>Done-confirmation, blocker или вопрос приходит в Inbox как typed card, а не теряется в чате.</small></div>
+              <div class="wf-node idea" style="left:300px;top:532px"><b>Feedback loop</b><small>Подтверждённый результат закрывает task/project; комментарий Вадима создаёт follow-up.</small></div>
+            </div>
           </div>
           <div class="card panel detail">
             <div class="preview">
-              <h3>Working rules</h3>
+              <h3>Workflow rules</h3>
               <div class="rule-list">
-                <div class="item"><h4>Idea ≠ commitment</h4><p>Идея — это captured signal. Она ждёт решения: развивать, превратить в маленькую задачу, отложить или закрыть.</p></div>
-                <div class="item"><h4>Approved idea → draft project</h4><p>OK по идее создаёт draft project + first task. Активным проект становится только после подтверждения outcome/приоритета.</p></div>
-                <div class="item"><h4>Task = next action</h4><p>Задача должна быть исполнимой: один понятный шаг, статус, привязка к проекту или source idea.</p></div>
-                <div class="item"><h4>Define before running</h4><p>У каждой задачи должно быть описание: outcome, scope, done criteria и blocker/trigger. В списках описание спрятано под spoiler, чтобы не шуметь.</p></div>
-                <div class="item"><h4>Schedules run by default</h4><p>Расписания делают свою работу без approval, если Вадим явно не поставил gate. Approval нужен для отдельных решений/новых идей.</p></div>
-                <div class="item"><h4>Inbox separates attention from work</h4><p>Inbox не равен “сделать всё”: это очередь решений. Explicit approvals остаются typed gates; идеи и задачи получают свои действия.</p></div>
-                <div class="item"><h4>Activity closes the loop</h4><p>Каждый запуск, публикация, ошибка или результат попадает в отдельный раздел Activity и может породить новую идею/таск.</p></div>
+                <div class="item"><h4>Idea ≠ commitment</h4><p>Intake only captures a signal. Commitment appears after decision: park, create one task, or open a draft project.</p></div>
+                <div class="item"><h4>Draft-first projects</h4><p>Большая идея сначала становится draft project with outcome + priority + review date. Active work starts only after the first ready task is clear.</p></div>
+                <div class="item"><h4>Task = executable next action</h4><p>Every task needs scope, done criteria, evidence expectation and blocker/trigger before a runner or schedule touches it.</p></div>
+                <div class="item"><h4>Approvals are typed gates</h4><p>External sends, publish actions, destructive operations and explicit user decisions pause in Inbox. Normal safe schedules should not ask every time.</p></div>
+                <div class="item"><h4>Per-task result cards</h4><p>Completed work reports back as a done-confirmation card. Short reports live in the card; long reports link to SourceCraft or an artifact.</p></div>
+                <div class="item"><h4>Blockers become Inbox, not silence</h4><p>If work cannot continue, the card must say what was done, what blocked it, and exactly what decision/input is needed from Вадим.</p></div>
+                <div class="item"><h4>Feedback creates follow-up</h4><p>Confirm closes the loop. Confirm with comment or Send back creates a follow-up task/idea instead of losing context in chat.</p></div>
               </div>
             </div>
           </div>
@@ -1034,7 +1039,7 @@ function showView(v) {
   $('#view-desc').textContent = titles[v][1];
 }
 
-const titles = {inbox:['Inbox','Items that need Vadim’s decision now: approvals, task actions/blockers/confirmations, and captured idea triage.'],ideas:['Ideas','Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.'],projects:['Projects','Approved ideas grouped into outcomes with owners, next tasks, and review dates.'],tasks:['Tasks','Concrete next actions created from ideas, projects, digests, and operational work.'],workflow:['Workflow','The lifecycle that connects ideas, decisions, draft projects, tasks, approvals, schedules, and activity feedback.'],activity:['Activity','Chronological event log: runs, approvals, idea transitions, publications, errors, and outcomes.'],schedules:['Schedules','Configured OpenClaw cron activities with last run, next run, and last execution status.'],artifacts:['Artifacts','Digest drafts, SourceCraft pages, generated reports, scripts, and compareable outputs.'],runs:['Runs','Subagents, background commands, last success and logs.'],health:['Health','Freshness checks, sync state, publish checks, and operational risks.']};
+const titles = {inbox:['Inbox','Items that need Vadim’s decision now: approvals, task actions/blockers/confirmations, and captured idea triage.'],ideas:['Ideas','Ideas should not disappear in chat. Capture, triage, approve, turn into projects/tasks, and track what happened next.'],projects:['Projects','Approved ideas grouped into outcomes with owners, next tasks, and review dates.'],tasks:['Tasks','Concrete next actions created from ideas, projects, digests, and operational work.'],workflow:['Workflow','How intake becomes a decision, draft project, ready task, run/schedule, result card, and follow-up loop.'],activity:['Activity','Chronological event log: runs, approvals, idea transitions, publications, errors, and outcomes.'],schedules:['Schedules','Configured OpenClaw cron activities with last run, next run, and last execution status.'],artifacts:['Artifacts','Digest drafts, SourceCraft pages, generated reports, scripts, and compareable outputs.'],runs:['Runs','Subagents, background commands, last success and logs.'],health:['Health','Freshness checks, sync state, publish checks, and operational risks.']};
 
 $$('.nav-btn').forEach(btn => btn.onclick = () => showView(btn.dataset.view));
 $$('[data-theme-btn]').forEach(btn => btn.onclick = () => { setTheme(btn.dataset.themeBtn); renderAll(); });
