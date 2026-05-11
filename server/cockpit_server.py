@@ -386,6 +386,32 @@ def complete_approval(conn: sqlite3.Connection, approval_id: str, run_status: st
     return dict(updated) if updated else None
 
 
+BAD_APPROVAL_TEXT_RE = re.compile(
+    r"\b(task id|report url|target_status|run_status|payload|handler|runner report|ok|send back|follow[- ]?up|impact)\b",
+    re.I,
+)
+GENERIC_APPROVAL_TEXT_RE = re.compile(
+    r"^(готово|сделано|выполнено|проверено|непонятно|нужно решение|требуется решение|блокер|ошибка|нет|n/?a|none|done|ok|blocked|waiting)$",
+    re.I,
+)
+
+
+def validate_inbox_approval_text(kind: str, body: str, payload: dict) -> None:
+    if kind not in {"task_done_confirmation", "task_attention"}:
+        return
+    fields = ["done", "evidence", "impact", "next_step"] if kind == "task_done_confirmation" else ["done", "problem", "needed"]
+    for field in fields:
+        text = re.sub(r"\s+", " ", str(payload.get(field) or "")).strip()
+        if len(text) < 24 or GENERIC_APPROVAL_TEXT_RE.match(text):
+            raise ValueError(f"{field}: Inbox-карточка слишком общая; перепиши обычным русским языком")
+        if len(text) > 700:
+            raise ValueError(f"{field}: Inbox-карточка слишком длинная; сократи до 700 символов")
+        if BAD_APPROVAL_TEXT_RE.search(text):
+            raise ValueError(f"{field}: Inbox-карточка содержит служебные английские слова")
+    if BAD_APPROVAL_TEXT_RE.search(body or ""):
+        raise ValueError("body: Inbox-карточка содержит служебные английские слова")
+
+
 def create_approval(conn: sqlite3.Connection, data: dict) -> dict:
     title = (data.get("title") or "").strip()
     if not title:
@@ -398,6 +424,7 @@ def create_approval(conn: sqlite3.Connection, data: dict) -> dict:
     payload = data.get("payload", {})
     if not isinstance(payload, dict):
         raise ValueError("payload must be an object")
+    validate_inbox_approval_text(kind, body, payload)
     t = now()
     conn.execute(
         """
