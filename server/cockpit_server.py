@@ -754,9 +754,20 @@ class Handler(SimpleHTTPRequestHandler):
                         conn.execute("insert or ignore into projects(id,title,status,body,source_idea_id,created_at,updated_at) values (?,?,?,?,?,?,?)", (project_id, idea["title"], "draft", "Draft project created from approved idea. Confirm before making active.", idea_id, t, t))
                         task_title = f"Реализовать: {idea['title']}" if action == "task" else f"Определить следующий шаг: {idea['title']}"
                         task_body = "Результат: одобренная идея превращена в одно понятное следующее действие. Объём: уточнить владельца, ожидаемый артефакт и критерии готовности перед запуском. Готово когда: связь проект/задача явная, а следующий шаг исполнения не требует догадок. По умолчанию задача запускается вручную через Run или планируется на 04:30 MSK."
-                        if not conn.execute("select 1 from tasks where id=?", (task_id,)).fetchone():
+                        existing_task = conn.execute(
+                            """
+                            select id, title from tasks
+                            where source_idea_id=? and status!='cancelled'
+                            order by updated_at desc
+                            limit 1
+                            """,
+                            (idea_id,),
+                        ).fetchone()
+                        if existing_task:
+                            add_activity(conn, f"Converted idea: {idea['title']}", f"Reused existing task `{existing_task['id']}` instead of creating a duplicate.", "Idea", "approved", "high")
+                        elif not conn.execute("select 1 from tasks where id=?", (task_id,)).fetchone():
                             create_task(conn, {"id": task_id, "title": task_title, "project": idea["title"], "status": "open", "body": task_body, "source_idea_id": idea_id, "trigger": "manual", "run_status": "idle"})
-                        add_activity(conn, f"Converted idea: {idea['title']}", "Created draft project/task follow-up with manual trigger.", "Idea", "approved", "high")
+                            add_activity(conn, f"Converted idea: {idea['title']}", "Created draft project/task follow-up with manual trigger.", "Idea", "approved", "high")
                     conn.commit()
                 elif parsed.path == "/api/projects/transition":
                     project_id = data["id"]
