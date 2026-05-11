@@ -126,6 +126,11 @@
     .task-blocker b { color:var(--bad); }
     .result-card { border-color: color-mix(in srgb,var(--good) 38%,transparent); background: linear-gradient(135deg, color-mix(in srgb,var(--good) 10%, transparent), var(--glass2)); }
     .result-card.attention { border-color: color-mix(in srgb,var(--warn) 46%,transparent); background: linear-gradient(135deg, color-mix(in srgb,var(--warn) 12%, transparent), var(--glass2)); }
+    .result-intro { border:1px solid var(--border); border-radius:12px; padding:10px; background:rgba(255,255,255,.04); margin:8px 0 10px; }
+    .result-intro p { color:var(--text); font-size:14px; line-height:1.45; margin-bottom:8px; }
+    .kv.compact { grid-template-columns: 96px 1fr; margin:0; gap:6px 10px; }
+    .kv.compact b { color:var(--soft); font-weight:600; }
+    .kv.compact span { color:var(--muted); overflow-wrap:anywhere; }
     .result-grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; margin-top:10px; }
     .result-section { border:1px solid var(--border); border-radius:14px; padding:10px; background:rgba(255,255,255,.035); }
     .result-section b { display:block; margin-bottom:4px; color:var(--text); font-size:12px; }
@@ -518,7 +523,7 @@ function taskDescription(t, label='Описание') { return `<details class="
 function taskBlocker(t) { return t.last_error ? `<div class="task-blocker"><b>Блокер / последняя ошибка:</b> ${linkifyText(t.last_error)}</div>` : ''; }
 function userNotesBlock(x) { return x?.user_notes ? `<div class="task-blocker"><b>Замечания Вадима:</b> ${linkifyText(x.user_notes)}</div>` : ''; }
 function userNotesForm(type, x) { return `<form class="edit-form" data-notes-edit="${escapeHtml(type)}" data-id="${escapeHtml(x.id)}"><label>Замечания Вадима<textarea name="user_notes" placeholder="Уточнения, поправки, ограничения, что обязательно учесть при реализации">${escapeHtml(x.user_notes || '')}</textarea><p class="form-hint">Эти заметки не заменяют описание: runner обязан учитывать их вместе с идеей/проектом/задачей.</p></label><div class="item-actions"><button class="btn primary" type="button" data-action="notes-save" data-type="${escapeHtml(type)}" data-id="${escapeHtml(x.id)}">Сохранить замечания</button></div></form>`; }
-function approvalCommentBox(id) { return `<label class="inline-comment">Комментарий для Клевера<textarea data-approval-comment="${escapeHtml(id)}" placeholder="Например: выбираю PR-template checklist сейчас; lint/automation позже после 2–3 реальных примеров. Можно написать несколько пунктов."></textarea></label>`; }
+function approvalCommentBox(id, placeholder='Коротко напиши, что решить или что переделать. Например: «подтверждаю», «сделай короче и объясни результат», «закрой, больше не нужно».') { return `<label class="inline-comment">Комментарий<textarea data-approval-comment="${escapeHtml(id)}" placeholder="${escapeHtml(placeholder)}"></textarea></label>`; }
 function approvalPayload(a) {
   try { return JSON.parse(a?.payload_json || '{}') || {}; }
   catch { return {}; }
@@ -530,17 +535,43 @@ function compactResultValue(value, fallback='—') {
 function resultSection(label, value) {
   return `<div class="result-section"><b>${escapeHtml(label)}</b><p>${linkifyText(compactResultValue(value))}</p></div>`;
 }
+function resultIntro(a, payload, fallback) {
+  const project = payload.project ? `<div><b>Проект</b><span>${escapeHtml(payload.project)}</span></div>` : '';
+  const taskId = payload.task_id ? `<div><b>ID задачи</b><span>${escapeHtml(payload.task_id)}</span></div>` : '';
+  return `<div class="result-intro"><p>${escapeHtml(compactResultValue(payload.summary, fallback))}</p><div class="kv compact">${project}${taskId}<div><b>Что нужно сделать</b><span>${escapeHtml(compactResultValue(payload.required_action, 'Нужно принять решение по карточке.'))}</span></div></div></div>`;
+}
 function taskResultCard(a) {
   const payload = approvalPayload(a);
   if (a.kind === 'task_done_confirmation') {
     const reportUrl = compactResultValue(payload.report_url, '');
-    const evidence = [payload.evidence, reportUrl ? `Report URL: ${reportUrl}` : ''].filter(Boolean).join('\n');
-    return `<div class="item result-card" data-approval="${escapeHtml(a.id)}"><div class="item-top"><div><div class="pill-row">${pill('result card','good')} ${pill(a.kind,'blue')} ${pill(a.priority,priorityClass(a.priority))} ${a.run_status ? pill(a.run_status,statusClass(a.run_status)) : ''}</div><h4>${escapeHtml(a.title)}</h4><div class="result-grid">${resultSection('Что сделано', payload.done)}${resultSection('Зачем / UX эффект', payload.impact)}${resultSection('Что дальше', payload.next_step)}${resultSection('Доказательства', evidence || payload.evidence)}</div><div class="result-hint">OK закрывает задачу. OK с комментарием создаёт follow-up, чтобы результат не исчезал после подтверждения. Если отчёт неверный — оставь комментарий и нажми “Send back”.</div>${approvalCommentBox(a.id)}</div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${escapeHtml(a.id)}">Confirm done</button><button class="btn" data-action="deny" data-id="${escapeHtml(a.id)}">Send back</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(a.id)}">Hold</button><button class="btn" data-action="details" data-id="${escapeHtml(a.id)}">Details</button></div></div>`;
+    const evidence = [payload.evidence, reportUrl ? `Отчёт: ${reportUrl}` : ''].filter(Boolean).join('\n');
+    return `<div class="item result-card" data-approval="${escapeHtml(a.id)}"><div class="item-top"><div><div class="pill-row">${pill('результат','good')} ${pill('проверка задачи','blue')} ${pill(priorityLabel(a.priority),priorityClass(a.priority))} ${a.run_status ? pill(a.run_status,statusClass(a.run_status)) : ''}</div><h4>${escapeHtml(a.title)}</h4>${resultIntro(a, payload, 'Нужно проверить результат задачи и решить, можно ли закрыть её как выполненную.')}<div class="result-grid">${resultSection('Что сделано', payload.done)}${resultSection('Зачем это нужно', payload.impact)}${resultSection('Что дальше', payload.next_step)}${resultSection('Доказательства', evidence || payload.evidence)}</div><div class="result-hint">«Подтвердить» закрывает задачу. «Вернуть с комментарием» отправляет её на доработку или создаёт следующий шаг из твоего комментария.</div>${approvalCommentBox(a.id, 'Если всё понятно — можно оставить пустым и нажать «Подтвердить». Если нет — напиши, что переделать или что уточнить.')}</div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${escapeHtml(a.id)}">Подтвердить</button><button class="btn" data-action="deny" data-id="${escapeHtml(a.id)}">Вернуть с комментарием</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(a.id)}">Отложить</button><button class="btn" data-action="details" data-id="${escapeHtml(a.id)}">Подробности</button></div></div>`;
   }
   if (a.kind === 'task_attention') {
-    return `<div class="item result-card attention" data-approval="${escapeHtml(a.id)}"><div class="item-top"><div><div class="pill-row">${pill('needs attention','warn')} ${pill(a.kind,'blue')} ${pill(a.priority,priorityClass(a.priority))}</div><h4>${escapeHtml(a.title)}</h4><div class="result-grid">${resultSection('Что уже сделано', payload.done)}${resultSection('Что мешает', payload.problem)}${resultSection('Что нужно от Вадима', payload.needed)}${resultSection('Доказательства', payload.report_url || payload.last_error || a.body)}</div>${approvalCommentBox(a.id)}</div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${escapeHtml(a.id)}">Send decision</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(a.id)}">Hold</button><button class="btn" data-action="details" data-id="${escapeHtml(a.id)}">Details</button></div></div>`;
+    return `<div class="item result-card attention" data-approval="${escapeHtml(a.id)}"><div class="item-top"><div><div class="pill-row">${pill('нужно решение','warn')} ${pill('задача остановлена','blue')} ${pill(priorityLabel(a.priority),priorityClass(a.priority))}</div><h4>${escapeHtml(a.title)}</h4>${resultIntro(a, payload, 'Задача остановилась и требует решения или уточнения.')}<div class="result-grid">${resultSection('Что уже сделано', payload.done)}${resultSection('Что мешает', payload.problem)}${resultSection('Что нужно от Вадима', payload.needed)}${resultSection('Доказательства', payload.report_url || payload.last_error || a.body)}</div><div class="result-hint">Напиши решение в комментарии. Если задача больше не нужна, напиши «закрой» или «отмени».</div>${approvalCommentBox(a.id, 'Напиши решение: что выбрать, что разрешить, что уточнить или что закрыть.')}</div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${escapeHtml(a.id)}">Отправить решение</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(a.id)}">Отложить</button><button class="btn" data-action="details" data-id="${escapeHtml(a.id)}">Подробности</button></div></div>`;
   }
   return '';
+}
+function approvalKindLabel(kind='') {
+  return ({
+    architecture_decision: 'архитектурное решение',
+    external_action: 'внешнее действие',
+    idea_review: 'проверка идеи',
+    task_triage: 'разбор задач',
+    workflow: 'рабочий процесс',
+    approval: 'согласование',
+    record_only: 'запись решения',
+  })[kind] || String(kind || 'согласование').replace(/_/g, ' ');
+}
+function priorityLabel(priority='') {
+  return ({ urgent: 'срочно', danger: 'опасно', high: 'важно', normal: 'обычно' })[priority] || String(priority || 'обычно');
+}
+function genericApprovalCard(item, held=false) {
+  const actionButtons = held
+    ? `<button class="btn" data-action="unhold-approval" data-id="${escapeHtml(item.id)}">Вернуть в Inbox</button><button class="btn" data-action="details" data-id="${escapeHtml(item.id)}">Подробности</button>`
+    : `<button class="btn primary" data-action="approve" data-id="${escapeHtml(item.id)}">Согласовать</button><button class="btn" data-action="deny" data-id="${escapeHtml(item.id)}">Отклонить</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(item.id)}">Отложить</button><button class="btn" data-action="details" data-id="${escapeHtml(item.id)}">Подробности</button>`;
+  const intro = resultIntro(item, approvalPayload(item), 'Нужно принять решение по этой карточке. Если формулировка непонятна, верни её с комментарием «переформулируй».');
+  return `<div class="item" data-approval="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill(held ? 'отложено' : 'нужно решение','warn')} ${pill(approvalKindLabel(item.kind),'blue')} ${pill(priorityLabel(item.priority),priorityClass(item.priority))} ${item.run_status ? pill(item.run_status,statusClass(item.run_status)) : ''}</div><h4>${escapeHtml(item.title)}</h4>${intro}<div class="result-grid">${resultSection('Описание', item.body)}${resultSection('Что сделать', 'Согласовать, отклонить или вернуть с комментарием, что именно непонятно или что нужно изменить.')}</div>${held ? '' : approvalCommentBox(item.id, 'Если неясно, напиши: «переформулируй: что сделано, что требуется от меня и что будет после нажатия».')}</div></div><div class="item-actions">${actionButtons}</div></div>`;
 }
 function pill(text, cls='') { return `<span class="pill ${cls}">${escapeHtml(text)}</span>`; }
 function legend(items, title='Legend') {
@@ -722,7 +753,7 @@ function renderInbox() {
   const root = $('#inbox-list');
   if (!root) return;
   const cards = inboxItems().map(({ type, item }) => {
-    if (type === 'approval') return taskResultCard(item) || `<div class="item" data-approval="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('approval','warn')} ${pill(item.kind,'blue')} ${pill(item.priority,priorityClass(item.priority))} ${item.handler ? pill(item.handler,'blue') : ''} ${item.run_status ? pill(item.run_status,statusClass(item.run_status)) : ''}</div><h4>${escapeHtml(item.title)}</h4><p>${linkifyText(item.body)}</p>${approvalCommentBox(item.id)}</div></div><div class="item-actions"><button class="btn primary" data-action="approve" data-id="${escapeHtml(item.id)}">OK</button><button class="btn" data-action="deny" data-id="${escapeHtml(item.id)}">Deny</button><button class="btn" data-action="hold-approval" data-id="${escapeHtml(item.id)}">Hold</button><button class="btn" data-action="details" data-id="${escapeHtml(item.id)}">Details</button></div></div>`;
+    if (type === 'approval') return taskResultCard(item) || genericApprovalCard(item);
     if (type === 'idea') return `<div class="item" data-idea="${escapeHtml(item.id)}"><div class="item-top"><div><div class="pill-row">${pill('idea triage','blue')} ${pill(item.status,statusClass(item.status))}</div><h4>${escapeHtml(item.title)}</h4><p>${escapeHtml(item.body)}</p>${userNotesBlock(item)}</div></div><div class="item-actions"><button class="btn primary" data-action="idea-task" data-id="${escapeHtml(item.id)}">Make task</button><button class="btn" data-action="idea-deny" data-id="${escapeHtml(item.id)}">Park</button><button class="btn" data-action="idea-dismiss" data-id="${escapeHtml(item.id)}">Dismiss</button><button class="btn" data-action="open-idea" data-id="${escapeHtml(item.id)}">Details</button></div></div>`;
     const done = item.status === 'done' || item.run_status === 'done';
     const blocked = item.run_status === 'failed' || item.status === 'waiting';
@@ -735,7 +766,7 @@ function renderInbox() {
   });
   root.innerHTML = cards.length ? cards.join('') : '<div class="empty">Inbox is clear. Nothing needs Vadim’s attention.</div>';
   const heldRoot = $('#held-approval-list');
-  if (heldRoot) heldRoot.innerHTML = (state.held_approvals || []).length ? state.held_approvals.map(a => `<div class="item" data-approval="${escapeHtml(a.id)}"><div class="item-top"><div><div class="pill-row">${pill('hold','warn')} ${pill(a.kind,'blue')} ${pill(a.priority,priorityClass(a.priority))}</div><h4>${escapeHtml(a.title)}</h4><p>${linkifyText(a.body)}</p></div></div><div class="item-actions"><button class="btn" data-action="unhold-approval" data-id="${escapeHtml(a.id)}">Return to inbox</button><button class="btn" data-action="details" data-id="${escapeHtml(a.id)}">Details</button></div></div>`).join('') : '<div class="empty">Long box is empty.</div>';
+  if (heldRoot) heldRoot.innerHTML = (state.held_approvals || []).length ? state.held_approvals.map(a => taskResultCard(a) || genericApprovalCard(a, true)).join('') : '<div class="empty">Отложенных карточек нет.</div>';
 }
 function ideaCard(idea) {
   const project = projectForIdea(idea);
